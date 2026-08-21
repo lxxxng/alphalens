@@ -1,0 +1,5 @@
+services:
+  # Add application services here.
+  placeholder:
+    image: busybox:latest
+    command: ["sh", "-c", "true"]

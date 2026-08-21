@@ -1,0 +1,1 @@
+"""AlphaLens application entry point."""
