@@ -13,6 +13,9 @@ venv/
 data/faiss/*
 !data/faiss/.gitkeep
 
+# Downloaded SEC filings
+data/sec/raw/
+
 # Notebooks
 .ipynb_checkpoints/
 
