@@ -16,6 +16,9 @@ data/faiss/*
 # Downloaded SEC filings
 data/sec/raw/
 
+# Parsed SEC filing text
+data/sec/clean/
+
 # Notebooks
 .ipynb_checkpoints/
 

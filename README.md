@@ -16,6 +16,7 @@ Run these steps in order:
 4. Run the market-data pipeline.
 5. Run the SEC metadata pipeline.
 6. Download the newest SEC filing documents.
+7. Parse downloaded SEC documents into clean text.
 
 ## 1. Create the Environment
 
@@ -49,6 +50,7 @@ Run each migration in order:
 Get-Content db\sql\001_initial_schema.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\002_sec_filings.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\003_filing_download_columns.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\004_filing_parse_columns.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -197,7 +199,40 @@ PENDING         | 300
 
 That is expected. The remaining metadata rows are `PENDING` because the downloader intentionally downloads only the newest `10-K` and `10-Q` first.
 
-## 7. Stop PostgreSQL
+## 7. Parse SEC Filings
+
+Convert downloaded SEC HTML files into clean `.txt` files:
+
+```powershell
+python -m pipelines.sec.parser
+```
+
+The parser reads files from `data/sec/raw/`, writes cleaned text to `data/sec/clean/`, and updates each filing’s `parse_status` in PostgreSQL.
+
+### Verify Parsed Filings
+
+```powershell
+docker exec -it alphalens-postgres psql -U alphalens -d alphalens
+```
+
+Check parsing results:
+
+```sql
+SELECT
+    ticker,
+    form_type,
+    parse_status,
+    clean_text_path,
+    parsed_at,
+    parse_error
+FROM filings
+WHERE download_status = 'DOWNLOADED'
+ORDER BY ticker, form_type;
+```
+
+Successful rows should have `parse_status = 'PARSED'` and a path under `data/sec/clean/`. Rows with `parse_status = 'FAILED'` include details in `parse_error`.
+
+## 8. Stop PostgreSQL
 
 Stop PostgreSQL without deleting its data volume:
 
