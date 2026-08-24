@@ -6,13 +6,13 @@ services:
 
     environment:
       # PostgreSQL username
-      POSTGRES_USER: alphalens
+      POSTGRES_USER: ${POSTGRES_USER}
 
       # PostgreSQL password
-      POSTGRES_PASSWORD: alphalens_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
       # Database that PostgreSQL creates automatically
-      POSTGRES_DB: alphalens
+      POSTGRES_DB: ${POSTGRES_DB}
 
     ports:
       # Windows port : container port
@@ -30,7 +30,7 @@ services:
 
     healthcheck:
       # Check whether PostgreSQL is ready to accept connections.
-      test: ["CMD-SHELL", "pg_isready -U alphalens -d alphalens"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
