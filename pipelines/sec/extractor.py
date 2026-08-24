@@ -94,6 +94,7 @@ SEC_TICKER_URL = (
 )
 
 
+
 # SEC submissions API.
 #
 # Later we append:
@@ -106,6 +107,22 @@ SEC_SUBMISSIONS_BASE_URL = (
     "https://data.sec.gov/submissions"
 )
 
+# ============================================================
+# SEC History Configuration
+# ============================================================
+
+# AlphaLens will keep SEC 10-K and 10-Q filings from the
+# most recent five years.
+#
+# Example:
+#
+# If today is:
+#     2026-08-24
+#
+# cutoff becomes approximately:
+#     2021-08-24
+#
+SEC_LOOKBACK_YEARS = 5
 
 # ============================================================
 # create_sec_session()
@@ -375,105 +392,378 @@ def fetch_company_submissions(
 
     return response.json()
 
+# ============================================================
+# fetch_historical_submission_file()
+# ============================================================
+
+def fetch_historical_submission_file(
+    session: requests.Session,
+    file_name: str,
+) -> dict:
+    """
+    Download one older SEC submissions-history JSON file.
+
+    Why is this needed?
+    -------------------
+
+    The main company submissions endpoint:
+
+        CIK##########.json
+
+    contains:
+
+        submissions["filings"]["recent"]
+
+    But for companies with more filing history, SEC may move
+    older records into additional JSON files.
+
+    The main JSON tells us about those files here:
+
+        submissions["filings"]["files"]
+
+    Example conceptually:
+
+        [
+            {
+                "name":
+                    "CIK0000320193-submissions-001.json",
+
+                "filingFrom":
+                    "1994-01-01",
+
+                "filingTo":
+                    "2024-01-01"
+            }
+        ]
+
+    We then download:
+
+        https://data.sec.gov/submissions/
+        CIK0000320193-submissions-001.json
+
+
+    Parameters
+    ----------
+    session:
+        Our reusable SEC HTTP session.
+
+    file_name:
+        Historical JSON filename supplied by SEC.
+
+
+    Returns
+    -------
+    dict:
+        Historical filing metadata.
+    """
+
+    url = (
+        f"{SEC_SUBMISSIONS_BASE_URL}/"
+        f"{file_name}"
+    )
+
+    response = session.get(
+        url,
+        timeout=30,
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+# ============================================================
+# extract_10k_10q()
+# ============================================================
 
 # ============================================================
 # extract_10k_10q()
 # ============================================================
 
 def extract_10k_10q(
+    session: requests.Session,
     ticker: str,
     company_name: str,
     cik: str,
     submissions: dict,
 ) -> pd.DataFrame:
     """
-    Convert SEC submissions JSON into clean 10-K/10-Q rows.
+    Extract approximately five years of SEC 10-K / 10-Q
+    filing metadata for one company.
+
+    Data sources
+    ------------
+
+    SEC divides filing history into two possible locations:
+
+        1. filings["recent"]
+
+            Recent filing metadata contained directly inside
+            the company's main submissions JSON.
+
+        2. filings["files"]
+
+            References to additional historical JSON files.
+
+    Therefore our pipeline becomes:
+
+        recent filings
+              +
+        historical filing files
+              ↓
+        combine
+              ↓
+        keep 10-K / 10-Q
+              ↓
+        keep last 5 years
+              ↓
+        remove duplicates
+
 
     Parameters
     ----------
-    ticker : str
+    session:
+        Reusable SEC requests session.
+
+    ticker:
         Stock ticker.
 
         Example:
             AAPL
 
-    company_name : str
-        SEC company name.
+    company_name:
+        Company name from SEC.
 
-        Example:
-            Apple Inc.
+    cik:
+        10-digit SEC CIK.
 
-    cik : str
-        SEC Central Index Key.
+    submissions:
+        Main company submissions JSON.
 
-    submissions : dict
-        Raw submissions JSON returned by SEC.
 
     Returns
     -------
-    pandas.DataFrame
-        Filing metadata containing one row per 10-K/10-Q.
-
-
-    What is a 10-K?
-    ---------------
-    Annual company filing.
-
-    Usually includes:
-
-        business description
-        risk factors
-        audited financial statements
-        management discussion
-        financial notes
-
-
-    What is a 10-Q?
-    ---------------
-    Quarterly filing.
-
-    Usually includes:
-
-        quarterly financial statements
-        management discussion
-        updated disclosures
-        updated risks
+    pandas.DataFrame:
+        Approximately five years of 10-K / 10-Q metadata.
     """
 
     # ========================================================
-    # Get recent filing information
+    # Calculate our five-year cutoff
     # ========================================================
     #
-    # SEC stores it here:
+    # Example:
+    #
+    # today:
+    #     2026-08-24
+    #
+    # minus 5 years:
+    #     2021-08-24
+    #
+    # DateOffset(years=5) is preferable to simply subtracting
+    # 365 * 5 days because leap years exist.
+    # ========================================================
+
+    cutoff_date = (
+        pd.Timestamp.now()
+        .normalize()
+        - pd.DateOffset(
+            years=SEC_LOOKBACK_YEARS
+        )
+    )
+
+
+    # ========================================================
+    # STEP 1 - Recent filings
+    # ========================================================
+
+    recent = (
+        submissions
+        .get("filings", {})
+        .get("recent", {})
+    )
+
+
+    # SEC recent data is stored as parallel arrays.
+    #
+    # Example:
+    #
+    # form:
+    #     ["10-Q", "8-K", "10-K"]
+    #
+    # filingDate:
+    #     ["2026-08-03", ...]
+    #
+    # DataFrame converts those parallel arrays into rows.
+    recent_filings = pd.DataFrame(
+        recent
+    )
+
+
+    # Store all filing DataFrames here.
+    filing_frames = []
+
+
+    if not recent_filings.empty:
+
+        filing_frames.append(
+            recent_filings
+        )
+
+
+    # ========================================================
+    # STEP 2 - Historical SEC files
+    # ========================================================
+    #
+    # SEC may provide something like:
     #
     # submissions
     #   └── filings
-    #         └── recent
+    #         ├── recent
+    #         └── files
+    #               ├── historical file 1
+    #               ├── historical file 2
+    #               └── ...
     #
-    recent = submissions["filings"]["recent"]
-
-    # ========================================================
-    # Convert SEC's column-oriented JSON into a DataFrame
-    # ========================================================
+    # Not every company needs historical files.
     #
-    # SEC data is conceptually:
+    # This explains why some companies previously had:
     #
-    # form:
-    #   ["10-Q", "8-K", "10-K", ...]
+    # AAPL = many filings
     #
-    # filingDate:
-    #   ["2026-...", "2026-...", ...]
+    # while:
     #
-    # accessionNumber:
-    #   [...]
+    # XOM = only 1 filing
     #
-    # Pandas turns those parallel arrays into rows.
+    # when we looked only at "recent".
     # ========================================================
 
-    filings = pd.DataFrame(recent)
+    historical_files = (
+        submissions
+        .get("filings", {})
+        .get("files", [])
+    )
+
+
+    for file_info in historical_files:
+
+        file_name = (
+            file_info.get("name")
+        )
+
+        filing_to = pd.to_datetime(
+            file_info.get("filingTo"),
+            errors="coerce",
+        )
+
+
+        # ----------------------------------------------------
+        # Skip historical files that are completely outside
+        # our five-year window.
+        # ----------------------------------------------------
+        #
+        # Example:
+        #
+        # cutoff:
+        #     2021-08-24
+        #
+        # historical file contains:
+        #     1994 → 2015
+        #
+        # There is no reason to download that file.
+        # ----------------------------------------------------
+
+        if (
+            pd.notna(filing_to)
+            and filing_to < cutoff_date
+        ):
+
+            continue
+
+
+        # If SEC didn't give us a filename, skip safely.
+        if not file_name:
+
+            continue
+
+
+        print(
+            f"    Fetching historical SEC file: "
+            f"{file_name}"
+        )
+
+
+        try:
+
+            historical_json = (
+                fetch_historical_submission_file(
+                    session=session,
+                    file_name=file_name,
+                )
+            )
+
+
+        except requests.RequestException as error:
+
+            # One old history file failing should not destroy
+            # the whole company's extraction.
+            print(
+                f"    [WARNING] Historical file failed: "
+                f"{error}"
+            )
+
+            continue
+
+
+        # Historical SEC submission files use the same
+        # column-oriented structure.
+        historical_df = pd.DataFrame(
+            historical_json
+        )
+
+
+        if not historical_df.empty:
+
+            filing_frames.append(
+                historical_df
+            )
+
+
+        # Be polite to SEC between historical requests.
+        time.sleep(0.2)
+
 
     # ========================================================
-    # Keep only 10-K and 10-Q
+    # STEP 3 - Validate
+    # ========================================================
+
+    if not filing_frames:
+
+        return pd.DataFrame(
+            columns=[
+                "ticker",
+                "company_name",
+                "cik",
+                "form_type",
+                "filing_date",
+                "report_date",
+                "accession_number",
+                "primary_document",
+            ]
+        )
+
+
+    # ========================================================
+    # STEP 4 - Combine recent + historical filings
+    # ========================================================
+
+    filings = pd.concat(
+        filing_frames,
+        ignore_index=True,
+    )
+
+
+    # ========================================================
+    # STEP 5 - Keep only 10-K and 10-Q
     # ========================================================
 
     filings = filings[
@@ -485,16 +775,81 @@ def extract_10k_10q(
         )
     ].copy()
 
+
     # ========================================================
-    # Add our own company metadata
+    # STEP 6 - Convert dates
+    # ========================================================
+
+    filings["filingDate"] = pd.to_datetime(
+        filings["filingDate"],
+        errors="coerce",
+    )
+
+
+    filings["reportDate"] = pd.to_datetime(
+        filings["reportDate"],
+        errors="coerce",
+    )
+
+
+    # Remove malformed records without a filing date.
+    filings = filings[
+        filings["filingDate"].notna()
+    ].copy()
+
+
+    # ========================================================
+    # STEP 7 - Keep only last five years
+    # ========================================================
+
+    filings = filings[
+        filings["filingDate"]
+        >= cutoff_date
+    ].copy()
+
+
+    # ========================================================
+    # STEP 8 - Remove duplicate filings
+    # ========================================================
+    #
+    # accessionNumber uniquely identifies one SEC filing.
+    #
+    # A record could theoretically appear in both:
+    #
+    #     recent
+    #
+    # and:
+    #
+    #     historical file
+    #
+    # around the boundary.
+    #
+    # We only want it once.
+    # ========================================================
+
+    filings = filings.drop_duplicates(
+        subset=[
+            "accessionNumber"
+        ],
+        keep="first",
+    )
+
+
+    # ========================================================
+    # STEP 9 - Add AlphaLens company metadata
     # ========================================================
 
     filings["ticker"] = ticker
-    filings["company_name"] = company_name
+
+    filings["company_name"] = (
+        company_name
+    )
+
     filings["cik"] = cik
 
+
     # ========================================================
-    # Keep only the columns AlphaLens currently needs
+    # STEP 10 - Keep only required columns
     # ========================================================
 
     filings = filings[
@@ -510,41 +865,42 @@ def extract_10k_10q(
         ]
     ]
 
+
     # ========================================================
-    # Rename SEC column names to our naming style
-    # ========================================================
-    #
-    # SEC:
-    #
-    #     filingDate
-    #
-    # AlphaLens:
-    #
-    #     filing_date
-    #
-    # Using snake_case consistently makes our Python
-    # and PostgreSQL schemas easier to work with.
+    # STEP 11 - Rename to AlphaLens snake_case format
     # ========================================================
 
     filings = filings.rename(
         columns={
-            "form": "form_type",
-            "filingDate": "filing_date",
-            "reportDate": "report_date",
-            "accessionNumber": "accession_number",
-            "primaryDocument": "primary_document",
+            "form":
+                "form_type",
+
+            "filingDate":
+                "filing_date",
+
+            "reportDate":
+                "report_date",
+
+            "accessionNumber":
+                "accession_number",
+
+            "primaryDocument":
+                "primary_document",
         }
     )
 
-    # Convert SEC date strings into Pandas dates.
-    filings["filing_date"] = pd.to_datetime(
-        filings["filing_date"]
+
+    # ========================================================
+    # STEP 12 - Sort newest first
+    # ========================================================
+
+    filings = filings.sort_values(
+        by="filing_date",
+        ascending=False,
+    ).reset_index(
+        drop=True
     )
 
-    filings["report_date"] = pd.to_datetime(
-        filings["report_date"],
-        errors="coerce",
-    )
 
     return filings
 
@@ -642,6 +998,7 @@ def extract_sec_filing_metadata() -> pd.DataFrame:
         # ====================================================
 
         filing_data = extract_10k_10q(
+            session=session,
             ticker=ticker,
             company_name=company_name,
             cik=cik,
