@@ -152,7 +152,7 @@ EARLY_DOCUMENT_RATIO = 0.15
 # the extractor considers.
 #
 # Very useful while developing/debugging.
-DEBUG_SECTION_MATCHES = True
+DEBUG_SECTION_MATCHES = False
 
 
 # ============================================================

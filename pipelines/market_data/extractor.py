@@ -36,6 +36,7 @@ It does not save anything into PostgreSQL yet.
 
 import yfinance as yf
 
+MARKET_LOOKBACK_YEARS = 5
 
 # ============================================================
 # AlphaLens Starter Stock Universe
@@ -119,9 +120,6 @@ TICKERS = [
     # Energy
     # --------------------------------------------------------
 
-    "XOM",    # Exxon Mobil Corporation
-              # Oil, natural gas and energy
-
     "CVX",    # Chevron Corporation
               # Oil, natural gas and energy
 
@@ -129,6 +127,9 @@ TICKERS = [
     # --------------------------------------------------------
     # Consumer Defensive / Retail
     # --------------------------------------------------------
+
+    "KO",     # The Coca-Cola Company
+              # Beverages and consumer products
 
     "WMT",    # Walmart Inc.
               # Global retail and supermarkets
@@ -184,130 +185,55 @@ BENCHMARK = "SPY"
 # extract_market_data()
 # ============================================================
 
+import pandas as pd
+import yfinance as yf
+
+
+MARKET_LOOKBACK_YEARS = 5
+
+
 def extract_market_data():
     """
-    Download historical daily market data from Yahoo Finance.
-
-    Returns
-    -------
-    pandas.DataFrame
-        A Pandas DataFrame containing daily OHLCV data for all
-        20 AlphaLens stocks plus SPY.
-
-    Data period
-    -----------
-    Start:
-        2024-01-01
-
-    End:
-        No explicit end date is supplied.
-
-        yfinance therefore requests data through the latest
-        available market data when the pipeline runs.
-
-    Interval:
-        1d = one row per trading day.
-
-    Why include 2024 onward?
-    ------------------------
-    This gives us enough historical data for early features such as:
-
-        - 30-day returns
-        - 90-day returns
-        - 30-day volatility
-        - moving averages
-        - 12-month momentum
-
-    without making the first version unnecessarily large.
-
-    The project can later perform a separate historical backfill
-    covering approximately five years.
+    Download five years of daily OHLCV data for the
+    AlphaLens stock universe plus SPY benchmark.
     """
 
-    # Combine the 20 company tickers with SPY.
-    #
-    # TICKERS itself remains our company universe.
-    # SPY remains clearly identifiable as the benchmark.
     all_tickers = TICKERS + [BENCHMARK]
 
-    # Display some basic information so we know that the
-    # extraction process has started.
-    print("Downloading OHLCV data...")
-
-    # There should currently be:
-    #   20 company stocks
-    #   + 1 SPY benchmark
-    #   = 21 symbols
-    print(f"Number of symbols: {len(all_tickers)}")
-
-    # --------------------------------------------------------
-    # Download market data
-    # --------------------------------------------------------
+    # Calculate a rolling five-year cutoff.
     #
-    # yf.download() sends requests to Yahoo Finance and returns
-    # the results as a Pandas DataFrame.
+    # Example:
     #
-    # Important parameters:
+    # today:
+    #     2026-08-24
     #
-    # tickers
-    #     Which stocks/ETFs should be downloaded.
+    # start:
+    #     2021-08-24
     #
-    # start
-    #     Earliest requested date.
-    #
-    # interval="1d"
-    #     Request daily market data.
-    #
-    # group_by="ticker"
-    #     Groups columns by stock ticker.
-    #
-    #     For example:
-    #
-    #         AAPL
-    #           Open
-    #           High
-    #           Low
-    #           Close
-    #           Adj Close
-    #           Volume
-    #
-    #         MSFT
-    #           Open
-    #           High
-    #           ...
-    #
-    #     This results in Pandas MultiIndex columns.
-    #
-    # auto_adjust=False
-    #     Keeps the original OHLC values and provides the
-    #     adjusted close separately.
-    #
-    #
-    # threads=False above makes yfinance download tickers one
-    # at a time. This is slightly slower, but avoids multiple
-    # download workers competing for yfinance's local cache
-    # database, which can cause "database is locked" failures.
-    #
-    # progress=True
-    #     Shows yfinance's download progress in the terminal.
-    # --------------------------------------------------------
+    start_date = (
+        pd.Timestamp.now()
+        .normalize()
+        - pd.DateOffset(years=MARKET_LOOKBACK_YEARS)
+    )
 
     data = yf.download(
         tickers=all_tickers,
-        start="2024-01-01",
+
+        # yfinance accepts a YYYY-MM-DD string.
+        start=start_date.strftime("%Y-%m-%d"),
+
         interval="1d",
         group_by="ticker",
         auto_adjust=False,
-        threads=False,
         progress=True,
+
+        # Keep this False because we previously encountered
+        # yfinance's internal SQLite "database is locked" error
+        # when downloading concurrently.
+        threads=False,
     )
 
-    # Return the downloaded DataFrame to whoever called
-    # this function.
-    #
-    # Nothing has been written to PostgreSQL yet.
     return data
-
 
 # ============================================================
 # Script Entry Point

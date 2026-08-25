@@ -720,13 +720,9 @@ def parse_downloaded_filings():
     Parse every SEC filing that AlphaLens has downloaded.
 
     Current dataset:
-        approximately 40 documents
-
-        latest 10-K
-        +
-        latest 10-Q
-
-        across 20 companies.
+        every SEC document that downloader.py has successfully
+        downloaded, normally approximately five years of 10-K
+        and 10-Q filings across 20 companies.
     """
 
     engine = get_database_engine()

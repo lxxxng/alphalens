@@ -164,7 +164,7 @@ def transform_market_data(raw_data: pd.DataFrame) -> pd.DataFrame:
         #
         # Example:
         #
-        # XOM
+        # KO
         # Open   NaN
         # High   NaN
         # ...

@@ -4,7 +4,7 @@ AlphaLens is a financial data pipeline that collects:
 
 - Daily OHLCV market data
 - SEC `10-K` and `10-Q` filing metadata
-- Selected SEC filing documents for later analysis
+- Five-year SEC filing documents for later analysis
 
 ## Quick Start
 
@@ -15,8 +15,9 @@ Run these steps in order:
 3. Apply the database migrations.
 4. Run the market-data pipeline.
 5. Run the SEC metadata pipeline.
-6. Download the newest SEC filing documents.
+6. Download the five-year SEC filing document backfill.
 7. Parse downloaded SEC documents into clean text.
+8. Extract filing sections into PostgreSQL.
 
 ## 1. Create the Environment
 
@@ -51,6 +52,7 @@ Get-Content db\sql\001_initial_schema.sql | docker exec -i alphalens-postgres ps
 Get-Content db\sql\002_sec_filings.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\003_filing_download_columns.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\004_filing_parse_columns.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\005_filing_sections.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -139,7 +141,7 @@ Run the complete SEC metadata pipeline. It extracts `10-K` and `10-Q` metadata, 
 python -m pipelines.sec.run_pipeline
 ```
 
-Download the newest `10-K` and `10-Q` HTML document for each company:
+Download all stored `10-K` and `10-Q` HTML documents. Because the SEC metadata extractor keeps approximately five years of filings, this performs the matching five-year document backfill:
 
 ```powershell
 python -m pipelines.sec.downloader
@@ -167,6 +169,22 @@ WHERE download_status = 'DOWNLOADED'
 ORDER BY ticker, form_type;
 ```
 
+Check download counts by ticker:
+
+```sql
+SELECT
+    ticker,
+    COUNT(*) AS filings,
+    MIN(filing_date) AS oldest,
+    MAX(filing_date) AS newest
+FROM filings
+WHERE download_status = 'DOWNLOADED'
+GROUP BY ticker
+ORDER BY ticker;
+```
+
+Most tickers should show 20 filings. A ticker can show slightly fewer, such as NVDA with 19, depending on its filing dates inside the rolling five-year window.
+
 You should see rows similar to:
 
 ```text
@@ -193,11 +211,10 @@ You might see:
 ```text
 download_status | count
 ----------------+-------
-DOWNLOADED      | 40
-PENDING         | 300
+DOWNLOADED      | 399
 ```
 
-That is expected. The remaining metadata rows are `PENDING` because the downloader intentionally downloads only the newest `10-K` and `10-Q` first.
+The exact count can vary slightly by filing calendar and ticker, but most companies should have about 20 documents for a five-year window.
 
 ## 7. Parse SEC Filings
 
@@ -232,7 +249,37 @@ ORDER BY ticker, form_type;
 
 Successful rows should have `parse_status = 'PARSED'` and a path under `data/sec/clean/`. Rows with `parse_status = 'FAILED'` include details in `parse_error`.
 
-## 8. Stop PostgreSQL
+## 8. Extract SEC Sections
+
+Extract useful sections such as Risk Factors, MD&A, and Financial Statements from the parsed filing text:
+
+```powershell
+python -m pipelines.sec.section_extractor
+```
+
+The section extractor reads parsed files from `data/sec/clean/` and stores extracted text in PostgreSQL table `filing_sections`.
+
+### Verify SEC Sections
+
+```sql
+SELECT COUNT(*) AS total_sections
+FROM filing_sections;
+```
+
+Check section counts by ticker:
+
+```sql
+SELECT
+    f.ticker,
+    COUNT(*) AS sections
+FROM filing_sections fs
+JOIN filings f
+    ON f.accession_number = fs.accession_number
+GROUP BY f.ticker
+ORDER BY f.ticker;
+```
+
+## 9. Stop PostgreSQL
 
 Stop PostgreSQL without deleting its data volume:
 

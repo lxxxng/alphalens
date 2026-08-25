@@ -63,12 +63,17 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from sqlalchemy import (
+    bindparam,
     MetaData,
     Table,
     create_engine,
+    text,
 )
 
 from sqlalchemy.dialects.postgresql import insert
+
+from pipelines.market_data.extractor import TICKERS
+from pipelines.sec.extractor import SEC_LOOKBACK_YEARS
 
 
 # ============================================================
@@ -493,6 +498,76 @@ def load_filing_metadata(
 
 
 # ============================================================
+# prune_stale_sec_filings()
+# ============================================================
+
+def prune_stale_sec_filings() -> int:
+    """
+    Remove SEC filing metadata outside the current pipeline scope.
+
+    The loader uses UPSERTs, which is perfect for refreshing current
+    filings but does not remove rows from older experiments or from a
+    previous ticker universe. This keeps the filings table aligned with:
+
+        current AlphaLens tickers
+        +
+        configured SEC lookback window
+
+    Deleting from filings also removes related filing_sections because
+    that table has ON DELETE CASCADE on accession_number.
+    """
+
+    cutoff_date = (
+        pd.Timestamp.now()
+        .normalize()
+        - pd.DateOffset(
+            years=SEC_LOOKBACK_YEARS
+        )
+    ).date()
+
+    query = (
+        text(
+            """
+            DELETE FROM filings
+
+            WHERE ticker NOT IN :current_tickers
+               OR filing_date < :cutoff_date
+
+            RETURNING 1;
+            """
+        )
+        .bindparams(
+            bindparam(
+                "current_tickers",
+                expanding=True,
+            )
+        )
+    )
+
+    engine = get_database_engine()
+
+    with engine.begin() as connection:
+
+        result = connection.execute(
+            query,
+            {
+                "current_tickers": TICKERS,
+                "cutoff_date": cutoff_date,
+            },
+        )
+
+        deleted_rows = len(
+            result.fetchall()
+        )
+
+    print(
+        f"[OK] Pruned {deleted_rows} stale SEC filings"
+    )
+
+    return deleted_rows
+
+
+# ============================================================
 # load_sec_data()
 # ============================================================
 
@@ -523,6 +598,13 @@ def load_sec_data(
     )
 
     # Then insert their filings.
-    return load_filing_metadata(
+    loaded_rows = load_filing_metadata(
         filings
     )
+
+    # Finally remove older/out-of-universe metadata so downstream
+    # document download, parsing, and section extraction match the
+    # current five-year SEC universe.
+    prune_stale_sec_filings()
+
+    return loaded_rows

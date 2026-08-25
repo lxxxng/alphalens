@@ -25,24 +25,13 @@ Current SEC pipeline:
     data/sec/raw/
 
 
-Initial strategy:
-    Download only:
+Current strategy:
+    Download every 10-K and 10-Q filing already stored in
+    PostgreSQL.
 
-        latest 10-K
-        latest 10-Q
-
-    for each AlphaLens company.
-
-With 20 companies this should produce approximately:
-
-        20 latest 10-Ks
-        +
-        20 latest 10-Qs
-        =
-        ~40 documents
-
-Later:
-    We will change this into a 5-year historical backfill.
+The metadata extractor controls the historical window. It currently
+loads approximately five years of filings, so this downloader performs
+the matching five-year document backfill.
 """
 
 import os
@@ -232,19 +221,19 @@ def build_filing_url(
 
 
 # ============================================================
-# get_latest_filing_candidates()
+# get_filing_candidates()
 # ============================================================
 
-def get_latest_filing_candidates(
+def get_filing_candidates(
     engine,
 ):
     """
-    Retrieve the latest 10-K and latest 10-Q for every company.
+    Retrieve every stored 10-K and 10-Q filing candidate.
 
-    Why start with only the latest filings?
-    ---------------------------------------
+    Download scope
+    --------------
 
-    We want to validate:
+    The filings table is the source of truth:
 
         database
             ↓
@@ -254,13 +243,14 @@ def get_latest_filing_candidates(
             ↓
         local file storage
 
-    before downloading years of documents.
+    the metadata extractor already limits rows to the configured
+    five-year SEC window.
 
 
-    PostgreSQL ROW_NUMBER()
-    -----------------------
+    Ordering
+    --------
 
-    We rank filings separately for:
+    We order filings by:
 
         ticker
         +
@@ -268,46 +258,18 @@ def get_latest_filing_candidates(
 
     Example:
 
-        AAPL 10-K 2025    rank 1
-        AAPL 10-K 2024    rank 2
+        AAPL 10-Q 2026Q2
+        AAPL 10-Q 2026Q1
+        AAPL 10-K 2025
+        AAPL 10-Q 2025Q3
 
-        AAPL 10-Q 2026Q2  rank 1
-        AAPL 10-Q 2026Q1  rank 2
+    The downloader keeps all returned rows:
 
-    Then we keep only:
-
-        rank = 1
+        every stored 10-K / 10-Q
     """
 
     query = text(
         """
-        WITH ranked_filings AS (
-
-            SELECT
-                ticker,
-                cik,
-                form_type,
-                filing_date,
-                accession_number,
-                primary_document,
-
-                ROW_NUMBER() OVER (
-                    PARTITION BY
-                        ticker,
-                        form_type
-
-                    ORDER BY
-                        filing_date DESC
-                ) AS filing_rank
-
-            FROM filings
-
-            WHERE form_type IN (
-                '10-K',
-                '10-Q'
-            )
-        )
-
         SELECT
             ticker,
             cik,
@@ -316,12 +278,17 @@ def get_latest_filing_candidates(
             accession_number,
             primary_document
 
-        FROM ranked_filings
+        FROM filings
 
-        WHERE filing_rank = 1
+        WHERE form_type IN (
+            '10-K',
+            '10-Q'
+        )
+          AND primary_document IS NOT NULL
 
         ORDER BY
             ticker,
+            filing_date DESC,
             form_type;
         """
     )
@@ -342,6 +309,10 @@ def get_latest_filing_candidates(
         rows = result.mappings().all()
 
     return rows
+
+
+# Backward-compatible name for older notebooks or scripts.
+get_latest_filing_candidates = get_filing_candidates
 
 
 # ============================================================
@@ -512,7 +483,7 @@ def download_filing(
         PostgreSQL connection engine.
 
     filing
-        Row returned from get_latest_filing_candidates().
+        Row returned from get_filing_candidates().
 
 
     Returns
@@ -655,15 +626,15 @@ def download_filing(
 
 
 # ============================================================
-# download_latest_filings()
+# download_filings()
 # ============================================================
 
-def download_latest_filings():
+def download_filings():
     """
-    Download the latest 10-K and 10-Q for every AlphaLens company.
+    Download all stored 10-K and 10-Q filings.
 
     Current target:
-        approximately 40 documents.
+        approximately five years of SEC documents.
 
     This function coordinates:
 
@@ -680,7 +651,7 @@ def download_latest_filings():
 
     session = create_sec_session()
 
-    filings = get_latest_filing_candidates(
+    filings = get_filing_candidates(
         engine
     )
 
@@ -726,10 +697,14 @@ def download_latest_filings():
     )
 
 
+# Backward-compatible name for older notebooks or scripts.
+download_latest_filings = download_filings
+
+
 # ============================================================
 # Script Entry Point
 # ============================================================
 
 if __name__ == "__main__":
 
-    download_latest_filings()
+    download_filings()

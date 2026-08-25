@@ -626,13 +626,13 @@ def extract_10k_10q(
     #
     # Not every company needs historical files.
     #
-    # This explains why some companies previously had:
+    # This explains why some companies may have:
     #
     # AAPL = many filings
     #
     # while:
     #
-    # XOM = only 1 filing
+    # another ticker = only 1 filing
     #
     # when we looked only at "recent".
     # ========================================================
