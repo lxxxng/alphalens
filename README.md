@@ -18,6 +18,7 @@ Run these steps in order:
 6. Download the five-year SEC filing document backfill.
 7. Parse downloaded SEC documents into clean text.
 8. Extract filing sections into PostgreSQL.
+9. Chunk SEC sections for later embeddings.
 
 ## 1. Create the Environment
 
@@ -53,6 +54,7 @@ Get-Content db\sql\002_sec_filings.sql | docker exec -i alphalens-postgres psql 
 Get-Content db\sql\003_filing_download_columns.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\004_filing_parse_columns.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\005_filing_sections.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\006_filing_chunks.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -279,7 +281,90 @@ GROUP BY f.ticker
 ORDER BY f.ticker;
 ```
 
-## 9. Stop PostgreSQL
+## 9. Chunk SEC Sections
+
+Split extracted SEC sections into smaller RAG-ready chunks:
+
+```powershell
+python -m pipelines.sec.chunker
+```
+
+The chunker reads from `filing_sections`, writes to `filing_chunks`, and can be run again safely. Existing chunks for each section are replaced with the current chunking output.
+
+### Verify SEC Chunks
+
+Check that every extracted filing section has at least one chunk:
+
+```sql
+SELECT
+    COUNT(*) AS sections_without_chunks
+FROM filing_sections fs
+LEFT JOIN filing_chunks fc
+    ON fs.section_id = fc.section_id
+WHERE fc.chunk_id IS NULL;
+```
+
+Expected result:
+
+```text
+sections_without_chunks
+-----------------------
+0
+```
+
+Check the chunk size summary:
+
+```sql
+SELECT
+    MIN(token_count) AS smallest,
+    ROUND(AVG(token_count), 2) AS average,
+    MAX(token_count) AS largest
+FROM filing_chunks;
+```
+
+Example result:
+
+```text
+smallest | average | largest
+---------+---------+--------
+11       | 675.26  | 700
+```
+
+Check the chunk size distribution:
+
+```sql
+SELECT
+    CASE
+        WHEN token_count < 100
+            THEN '<100'
+        WHEN token_count < 300
+            THEN '100-299'
+        WHEN token_count < 500
+            THEN '300-499'
+        WHEN token_count < 650
+            THEN '500-649'
+        ELSE
+            '650-700'
+    END AS token_range,
+    COUNT(*) AS chunks
+FROM filing_chunks
+GROUP BY token_range
+ORDER BY MIN(token_count);
+```
+
+Example result:
+
+```text
+token_range | chunks
+------------+-------
+<100        | 453
+100-299     | 621
+300-499     | 485
+500-649     | 249
+650-700     | 30266
+```
+
+## 10. Stop PostgreSQL
 
 Stop PostgreSQL without deleting its data volume:
 
