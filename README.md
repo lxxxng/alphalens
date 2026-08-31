@@ -6,6 +6,9 @@ AlphaLens is a financial data pipeline that collects:
 - SEC `10-K` and `10-Q` filing metadata
 - Five-year SEC filing documents for later analysis
 
+For complete new-device setup, pipeline commands, verification, and recovery
+notes, see [RUNBOOK.md](RUNBOOK.md).
+
 ## Quick Start
 
 Run these steps in order:
@@ -55,6 +58,7 @@ Get-Content db\sql\003_filing_download_columns.sql | docker exec -i alphalens-po
 Get-Content db\sql\004_filing_parse_columns.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\005_filing_sections.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\006_filing_chunks.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\007_chunk_embeddings.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
