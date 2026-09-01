@@ -180,6 +180,17 @@ Rules:
 10. Distinguish what the company explicitly states from any
     reasonable interpretation. Avoid presenting inference as
     a direct company statement.
+
+11. For comparison questions, discuss each company separately
+    before summarizing the important similarities and
+    differences.
+
+12. Do not claim that one company has more or less risk unless
+    the supplied evidence supports that comparison.
+
+13. Pay attention to the ticker and filing date attached to
+    each source. Do not attribute one company's statement to
+    another company.
 """.strip()
 
 
@@ -636,6 +647,129 @@ def generate_grounded_answer(
     # text from the Responses API.
     return response.output_text.strip()
 
+# ============================================================
+# retrieve_evidence()
+# ============================================================
+
+def retrieve_evidence(
+    question: str,
+    top_k: int,
+    tickers: list[str],
+    form_type: str | None = None,
+    section_key: str | None = None,
+) -> list[dict]:
+    """
+    Retrieve SEC evidence for one or more companies.
+
+    Why retrieve each company separately?
+    -------------------------------------
+
+    Suppose the question is:
+
+        "Compare Microsoft and NVIDIA's AI risks."
+
+    If we perform one global FAISS search, we might get:
+
+        NVDA
+        NVDA
+        NVDA
+        NVDA
+        MSFT
+
+    That gives the LLM much more NVIDIA evidence than
+    Microsoft evidence.
+
+    Instead we run:
+
+        semantic_search(... ticker="MSFT")
+        semantic_search(... ticker="NVDA")
+
+    separately.
+
+    This gives balanced evidence for comparison.
+
+
+    Parameters
+    ----------
+    question:
+        User research question.
+
+    top_k:
+        Number of chunks to retrieve PER COMPANY.
+
+    tickers:
+        Companies detected by company_resolver.py.
+
+        Examples:
+
+            ["NVDA"]
+
+            ["MSFT", "NVDA"]
+
+    form_type:
+        Optional filing filter.
+
+    section_key:
+        Optional section filter.
+
+
+    Returns
+    -------
+    list[dict]
+
+        Combined retrieved SEC chunks.
+    """
+
+    all_results = []
+
+
+    # ========================================================
+    # No company detected
+    # ========================================================
+    #
+    # Example:
+    #
+    #     "What are the most common cybersecurity risks?"
+    #
+    # Search the whole corpus.
+    # ========================================================
+
+    if not tickers:
+
+        return semantic_search(
+            query=question,
+            top_k=top_k,
+            form_type=form_type,
+            section_key=section_key,
+        )
+
+
+    # ========================================================
+    # Company-specific retrieval
+    # ========================================================
+
+    for ticker in tickers:
+
+        results = semantic_search(
+
+            query=question,
+
+            top_k=top_k,
+
+            ticker=ticker,
+
+            form_type=form_type,
+
+            section_key=section_key,
+        )
+
+
+        all_results.extend(
+            results
+        )
+
+
+    return all_results
 
 # ============================================================
 # answer_question()
@@ -649,62 +783,50 @@ def answer_question(
     section_key: str | None = None,
 ) -> dict:
     """
-    Run the complete AlphaLens RAG question-answer workflow.
+    Run the complete AlphaLens RAG workflow.
 
-    Flow
-    ----
+    Supports:
 
-        user question
+        no company
+        one company
+        multiple companies
+
+
+    Examples
+    --------
+
+    Single company:
+
+        What cybersecurity risks does NVIDIA face?
+
             ↓
-        semantic_search()
+
+        detected_tickers = ["NVDA"]
+
+
+    Multiple companies:
+
+        Compare Microsoft and NVIDIA's AI risks.
+
             ↓
-        FAISS
+
+        detected_tickers = [
+            "MSFT",
+            "NVDA"
+        ]
+
+
+    No company:
+
+        What cybersecurity risks are commonly discussed?
+
             ↓
-        relevant chunks
+
+        detected_tickers = []
+
             ↓
-        generate_grounded_answer()
-            ↓
-        final answer + source metadata
 
-
-    Parameters
-    ----------
-    question:
-        User question.
-
-    top_k:
-        Number of SEC chunks to retrieve.
-
-    ticker:
-        Optional ticker filter.
-
-        Example:
-            NVDA
-
-    form_type:
-        Optional filing-type filter.
-
-        Example:
-            10-K
-
-    section_key:
-        Optional section filter.
-
-        Example:
-            item_1a_risk_factors
-
-
-    Returns
-    -------
-    dict
-
-        {
-            "question": "...",
-
-            "answer": "...",
-
-            "sources": [...]
-        }
+        search entire AlphaLens SEC corpus
     """
 
     question = question.strip()
@@ -716,29 +838,33 @@ def answer_question(
             "Question cannot be empty."
         )
 
+
     # ========================================================
-    # Automatically detect company
-    # ========================================================
-    #
-    # If the caller explicitly supplied ticker="NVDA",
-    # we respect it.
-    #
-    # Otherwise try to detect the ticker from the question.
-    #
-    # Example:
-    #
-    #     "What cybersecurity risks does NVIDIA face?"
-    #
-    # becomes:
-    #
-    #     ticker = "NVDA"
-    #
+    # STEP 1 - DETECT COMPANIES
     # ========================================================
 
-    detected_tickers = []
+    if ticker is not None:
+
+        # ----------------------------------------------------
+        # Caller explicitly supplied a ticker.
+        #
+        # Example API request:
+        #
+        #     {
+        #         "question": "...",
+        #         "ticker": "NVDA"
+        #     }
+        #
+        # Explicit filter takes priority over automatic
+        # detection.
+        # ----------------------------------------------------
+
+        detected_tickers = [
+            ticker.upper()
+        ]
 
 
-    if ticker is None:
+    else:
 
         detected_tickers = (
             resolve_tickers(
@@ -747,38 +873,48 @@ def answer_question(
         )
 
 
-        # ----------------------------------------------------
-        # Current AlphaLens retriever supports one ticker
-        # filter at a time.
-        # ----------------------------------------------------
-
-        if len(detected_tickers) == 1:
-
-            ticker = (
-                detected_tickers[0]
-            )
-
-
-        elif len(detected_tickers) > 1:
-
-            raise ValueError(
-                "Multiple companies were detected: "
-                f"{detected_tickers}. "
-                "Multi-company comparison retrieval has "
-                "not been implemented yet."
-            )
-    
     # ========================================================
-    # STEP 1 - RETRIEVE
+    # Safety limit
+    # ========================================================
+    #
+    # A question mentioning 20 companies could cause:
+    #
+    #     20 retrieval searches
+    #     ×
+    #     top_k chunks
+    #
+    # and create a very large LLM prompt.
+    #
+    # Four companies is enough for our current AlphaLens
+    # comparison workflow.
     # ========================================================
 
-    retrieved_results = semantic_search(
+    MAX_COMPANIES_PER_QUERY = 4
 
-        query=question,
+
+    if (
+        len(detected_tickers)
+        > MAX_COMPANIES_PER_QUERY
+    ):
+
+        raise ValueError(
+            "AlphaLens currently supports comparisons "
+            f"between up to "
+            f"{MAX_COMPANIES_PER_QUERY} companies."
+        )
+
+
+    # ========================================================
+    # STEP 2 - RETRIEVE
+    # ========================================================
+
+    retrieved_results = retrieve_evidence(
+
+        question=question,
 
         top_k=top_k,
 
-        ticker=ticker,
+        tickers=detected_tickers,
 
         form_type=form_type,
 
@@ -787,7 +923,7 @@ def answer_question(
 
 
     # ========================================================
-    # STEP 2 - GENERATE
+    # STEP 3 - GENERATE GROUNDED ANSWER
     # ========================================================
 
     answer = generate_grounded_answer(
@@ -799,7 +935,7 @@ def answer_question(
 
 
     # ========================================================
-    # STEP 3 - CREATE STRUCTURED SOURCES
+    # STEP 4 - STRUCTURED CITATIONS
     # ========================================================
 
     sources = build_source_records(
@@ -808,10 +944,11 @@ def answer_question(
 
 
     # ========================================================
-    # Return application-friendly structure
+    # Return application-friendly response
     # ========================================================
 
     return {
+
         "question":
             question,
 
@@ -890,27 +1027,17 @@ def print_rag_result(
 
 if __name__ == "__main__":
 
-    # ========================================================
-    # Test 1
-    # ========================================================
-    #
-    # We manually pass ticker="NVDA" for now.
-    #
-    # Later we'll make AlphaLens detect "NVIDIA" from the
-    # question and automatically convert it into:
-    #
-    #     ticker = NVDA
-    #
-    # ========================================================
-
     test_question = (
-        "What cybersecurity risks does NVIDIA face?"
+        "Compare Microsoft and NVIDIA's AI-related risks."
     )
 
 
     result = answer_question(
+
         question=test_question,
-        top_k=5,
+
+        # 4 chunks PER company.
+        top_k=4,
     )
 
 
