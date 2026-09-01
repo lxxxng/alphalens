@@ -40,6 +40,9 @@ DATABASE_URL=postgresql+psycopg2://alphalens:your-password@localhost:5432/alphal
 
 SEC_USER_AGENT=AlphaLens your-email@example.com
 OPENAI_API_KEY=your-openai-api-key
+ALPHA_VANTAGE_API_KEY=your-alpha-vantage-api-key
+TRANSCRIPT_LOOKBACK_YEARS=5
+TRANSCRIPT_REQUEST_SECONDS=12
 ```
 
 Do not commit `.env`.
@@ -63,6 +66,7 @@ Get-Content -Raw db\sql\004_filing_parse_columns.sql | docker exec -i alphalens-
 Get-Content -Raw db\sql\005_filing_sections.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\006_filing_chunks.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\007_chunk_embeddings.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
+Get-Content -Raw db\sql\008_earnings_transcripts.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 ```
 
 ## 6. Run all pipelines in order
@@ -89,6 +93,10 @@ python -m pipelines.sec.chunker
 # Create OpenAI embeddings and the FAISS index
 # Model: text-embedding-3-small
 python -m pipelines.sec.embedder
+
+# Earnings call transcripts
+python -m pipelines.transcripts.run_pipeline
+python -m pipelines.transcripts.chunker
 ```
 
 The embedder can be rerun. It resumes from the existing FAISS index.
@@ -98,6 +106,9 @@ The embedder can be rerun. It resumes from the existing FAISS index.
 ```powershell
 # Main database counts
 docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT 'market_prices' AS name, COUNT(*) FROM market_prices UNION ALL SELECT 'filings', COUNT(*) FROM filings UNION ALL SELECT 'filing_sections', COUNT(*) FROM filing_sections UNION ALL SELECT 'filing_chunks', COUNT(*) FROM filing_chunks;"
+
+# Transcript counts
+docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT 'earnings_transcripts' AS name, COUNT(*) FROM earnings_transcripts UNION ALL SELECT 'earnings_transcript_turns', COUNT(*) FROM earnings_transcript_turns UNION ALL SELECT 'earnings_transcript_chunks', COUNT(*) FROM earnings_transcript_chunks;"
 
 # Download, parsing, and embedding status
 docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT download_status, parse_status, COUNT(*) FROM filings GROUP BY download_status, parse_status; SELECT embedding_status, COUNT(*) FROM filing_chunks GROUP BY embedding_status;"

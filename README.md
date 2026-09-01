@@ -5,6 +5,7 @@ AlphaLens is a financial data pipeline that collects:
 - Daily OHLCV market data
 - SEC `10-K` and `10-Q` filing metadata
 - Five-year SEC filing documents for later analysis
+- Quarterly earnings call transcripts and speaker turns
 
 For complete new-device setup, pipeline commands, verification, and recovery
 notes, see [RUNBOOK.md](RUNBOOK.md).
@@ -22,6 +23,7 @@ Run these steps in order:
 7. Parse downloaded SEC documents into clean text.
 8. Extract filing sections into PostgreSQL.
 9. Chunk SEC sections for later embeddings.
+10. Run the earnings transcript pipeline.
 
 ## 1. Create the Environment
 
@@ -38,6 +40,7 @@ Review `.env` and set the required database and SEC values:
 ```text
 DATABASE_URL=postgresql+psycopg2://alphalens:password@localhost:5432/alphalens
 SEC_USER_AGENT=AlphaLens your-email@example.com
+ALPHA_VANTAGE_API_KEY=your-alpha-vantage-api-key
 ```
 
 ## 2. Start PostgreSQL
@@ -59,6 +62,7 @@ Get-Content db\sql\004_filing_parse_columns.sql | docker exec -i alphalens-postg
 Get-Content db\sql\005_filing_sections.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\006_filing_chunks.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\007_chunk_embeddings.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\008_earnings_transcripts.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -368,7 +372,48 @@ token_range | chunks
 650-700     | 30266
 ```
 
-## 10. Stop PostgreSQL
+## 10. Run Earnings Transcripts
+
+AlphaLens uses Alpha Vantage's `EARNINGS_CALL_TRANSCRIPT` endpoint for
+quarterly earnings calls. Set `ALPHA_VANTAGE_API_KEY` in `.env`, then run:
+
+```powershell
+python -m pipelines.transcripts.run_pipeline
+python -m pipelines.transcripts.chunker
+```
+
+The pipeline stores one row per ticker/fiscal quarter in
+`earnings_transcripts`, normalized speaker turns in
+`earnings_transcript_turns`, and RAG-ready chunks in
+`earnings_transcript_chunks`.
+
+### Verify Earnings Transcripts
+
+```sql
+SELECT
+    ticker,
+    COUNT(*) AS transcripts,
+    MIN(fiscal_period) AS oldest,
+    MAX(fiscal_period) AS newest
+FROM earnings_transcripts
+GROUP BY ticker
+ORDER BY ticker;
+```
+
+Check speaker turns and chunks:
+
+```sql
+SELECT COUNT(*) AS turns
+FROM earnings_transcript_turns;
+
+SELECT
+    MIN(token_count) AS smallest,
+    ROUND(AVG(token_count), 2) AS average,
+    MAX(token_count) AS largest
+FROM earnings_transcript_chunks;
+```
+
+## 11. Stop PostgreSQL
 
 Stop PostgreSQL without deleting its data volume:
 
