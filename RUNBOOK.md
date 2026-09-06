@@ -40,9 +40,9 @@ DATABASE_URL=postgresql+psycopg2://alphalens:your-password@localhost:5432/alphal
 
 SEC_USER_AGENT=AlphaLens your-email@example.com
 OPENAI_API_KEY=your-openai-api-key
-ALPHA_VANTAGE_API_KEY=your-alpha-vantage-api-key
+EARNINGSCALLS_API_KEY=your-earningscalls-dev-api-key
 TRANSCRIPT_LOOKBACK_YEARS=5
-TRANSCRIPT_REQUEST_SECONDS=12
+EARNINGSCALLS_REQUEST_SECONDS=3.1
 ```
 
 Do not commit `.env`.
@@ -97,6 +97,9 @@ python -m pipelines.sec.embedder
 # Earnings call transcripts
 python -m pipelines.transcripts.run_pipeline
 python -m pipelines.transcripts.chunker
+
+# Small/resumable transcript test
+python -m pipelines.transcripts.run_pipeline --tickers AAPL --max-transcripts-per-ticker 1
 ```
 
 The embedder can be rerun. It resumes from the existing FAISS index.

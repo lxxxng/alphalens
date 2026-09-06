@@ -68,6 +68,7 @@ from sqlalchemy import (
     Table,
     create_engine,
     delete,
+    select,
     text,
 )
 
@@ -210,6 +211,56 @@ def validate_transcripts(
         raise ValueError(
             f"Missing transcript columns: {missing_columns}"
         )
+
+
+# ============================================================
+# get_loaded_source_urls()
+# ============================================================
+
+def get_loaded_source_urls(
+    source_provider: str,
+) -> set[str]:
+    """
+    Return source URLs already stored for one transcript provider.
+
+    The EarningsCalls.dev URL contains its stable earnings-call ID. The
+    extractor can therefore skip completed calls before downloading their
+    details, full text, and speaker pages again.
+    """
+
+    engine = get_database_engine()
+    metadata = MetaData()
+
+    transcript_table = Table(
+        "earnings_transcripts",
+        metadata,
+        autoload_with=engine,
+    )
+
+    query = (
+        select(
+            transcript_table.c.source_url
+        )
+        .where(
+            transcript_table.c.source_provider
+            == source_provider
+        )
+        .where(
+            transcript_table.c.ingest_status
+            == "INGESTED"
+        )
+    )
+
+    with engine.connect() as connection:
+        rows = connection.execute(
+            query
+        )
+
+        return {
+            row.source_url
+            for row in rows
+            if row.source_url
+        }
 
 
 def build_transcript_record(

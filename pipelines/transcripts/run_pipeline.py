@@ -6,7 +6,7 @@ Purpose:
 
 Pipeline:
 
-    Alpha Vantage
+    EarningsCalls.dev
         |
         v
     extractor.py
@@ -36,57 +36,72 @@ That mirrors the SEC pipeline:
 
 Keeping these stages separate makes reruns easier. For example, if we
 improve transcript chunking later, we can rerun only the chunker without
-calling Alpha Vantage again.
+calling EarningsCalls.dev again.
 """
 
-from pipelines.transcripts.extractor import (
+import argparse
+
+from pipelines.market_data.extractor import TICKERS
+
+from pipelines.transcripts.earningscalls_extractor import (
+    SOURCE_PROVIDER,
     extract_earnings_transcripts,
 )
 
 from pipelines.transcripts.loader import (
+    get_loaded_source_urls,
     load_earnings_transcripts,
 )
 
 
-def run_transcript_pipeline():
+def run_transcript_pipeline(
+    tickers: list[str] | None = None,
+    max_transcripts_per_ticker: int | None = None,
+    refresh_existing: bool = False,
+):
     """
     Execute the earnings transcript ETL workflow.
     """
 
-    print("\n========================================")
-    print("STEP 1 - TRANSCRIPT EXTRACT")
-    print("========================================")
+    if tickers is None:
+        tickers = TICKERS
 
-    # STEP 1:
-    #
-    # Call the provider API and normalize every valid transcript into one
-    # row-like dictionary.
-    transcripts = extract_earnings_transcripts()
-
-    print(
-        f"\nTranscripts extracted: {len(transcripts)}"
+    # Existing source URLs are stable provider call IDs. Supplying them to
+    # the extractor avoids spending API quota on completed transcripts.
+    loaded_source_urls = (
+        set()
+        if refresh_existing
+        else get_loaded_source_urls(SOURCE_PROVIDER)
     )
 
-    # If nothing came back, stop before the loader.
-    #
-    # This avoids a misleading database transaction when the provider
-    # returned no usable transcript data.
-    if transcripts.empty:
-        print(
-            "No transcripts were returned. Nothing to load."
+    loaded_rows = 0
+
+    # Extract and commit one ticker at a time. If a long backfill stops,
+    # completed tickers remain in PostgreSQL and are skipped on rerun.
+    for ticker in tickers:
+        print("\n========================================")
+        print(f"TRANSCRIPT EXTRACT - {ticker}")
+        print("========================================")
+
+        transcripts = extract_earnings_transcripts(
+            tickers=[ticker],
+            loaded_source_urls=loaded_source_urls,
+            max_transcripts_per_ticker=max_transcripts_per_ticker,
         )
-        return 0
 
-    print("\n========================================")
-    print("STEP 2 - POSTGRESQL LOAD")
-    print("========================================")
+        if transcripts.empty:
+            print(
+                f"No new transcripts returned for {ticker}."
+            )
+            continue
 
-    # STEP 2:
-    #
-    # Store transcript rows and speaker turns in PostgreSQL using upserts.
-    loaded_rows = load_earnings_transcripts(
-        transcripts
-    )
+        print("\n========================================")
+        print(f"POSTGRESQL LOAD - {ticker}")
+        print("========================================")
+
+        loaded_rows += load_earnings_transcripts(
+            transcripts
+        )
 
     print("\n========================================")
     print("TRANSCRIPT PIPELINE COMPLETE")
@@ -100,4 +115,38 @@ def run_transcript_pipeline():
 
 
 if __name__ == "__main__":
-    run_transcript_pipeline()
+    parser = argparse.ArgumentParser(
+        description=(
+            "Download EarningsCalls.dev transcripts and load PostgreSQL."
+        )
+    )
+
+    parser.add_argument(
+        "--tickers",
+        nargs="+",
+        default=None,
+        help="Optional ticker subset, for example: AAPL MSFT",
+    )
+
+    parser.add_argument(
+        "--max-transcripts-per-ticker",
+        type=int,
+        default=None,
+        help="Limit downloads per ticker for a small integration test.",
+    )
+
+    parser.add_argument(
+        "--refresh-existing",
+        action="store_true",
+        help="Download calls again even when they are already loaded.",
+    )
+
+    arguments = parser.parse_args()
+
+    run_transcript_pipeline(
+        tickers=arguments.tickers,
+        max_transcripts_per_ticker=(
+            arguments.max_transcripts_per_ticker
+        ),
+        refresh_existing=arguments.refresh_existing,
+    )
