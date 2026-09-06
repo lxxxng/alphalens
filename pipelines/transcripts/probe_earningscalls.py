@@ -1,10 +1,10 @@
 """
-AlphaLens - EarningsCalls.dev Free-Tier Probe
+AlphaLens - EarningsCalls.dev API Probe
 
 Purpose
 -------
-Test the EarningsCalls.dev API through RapidAPI before paying for a
-full-transcript plan.
+Test the official EarningsCalls.dev API before connecting it to the main
+transcript pipeline.
 
 This script checks two things for a small group of companies:
 
@@ -33,7 +33,7 @@ Request flow
 Safety limits
 -------------
 
-The free plan has a small monthly request allowance, so this diagnostic:
+The API plan has a monthly request allowance, so this diagnostic:
 
     - accepts no more than three tickers
     - makes no more than two requests per ticker
@@ -48,7 +48,7 @@ Setup
 
 Add the following variable to the project .env file:
 
-    RAPIDAPI_KEY=your_key_here
+    EARNINGSCALLS_API_KEY=your_key_here
 
 Then run:
 
@@ -73,17 +73,12 @@ import requests
 # Provider Configuration
 # ============================================================
 
-RAPIDAPI_HOST = (
-    "earnings-call-transcripts1.p.rapidapi.com"
-)
-
 BASE_URL = (
-    f"https://{RAPIDAPI_HOST}/api/v1"
+    "https://earningscalls.dev/api/v1"
 )
 
-FREE_PLAN_URL = (
-    "https://rapidapi.com/earningscallsdev/api/"
-    "earnings-call-transcripts1"
+SUBSCRIPTION_URL = (
+    "https://earningscalls.dev/earnings-call-api"
 )
 
 
@@ -102,7 +97,7 @@ DEFAULT_TICKERS = [
 # One company lookup plus one transcript-preview lookup per ticker.
 REQUESTS_PER_TICKER = 2
 
-# Keep accidental command-line input from consuming the free quota.
+# Keep accidental command-line input from consuming the monthly quota.
 MAX_TICKERS = 3
 
 # A conservative pause keeps the requests comfortably below typical
@@ -128,7 +123,7 @@ def get_tickers() -> list[str]:
 
     parser = argparse.ArgumentParser(
         description=(
-            "Test EarningsCalls.dev's free RapidAPI tier "
+            "Test the official EarningsCalls.dev API "
             "without loading PostgreSQL."
         )
     )
@@ -173,12 +168,12 @@ def get_tickers() -> list[str]:
 
 
 # ============================================================
-# get_rapidapi_key()
+# get_earningscalls_api_key()
 # ============================================================
 
-def get_rapidapi_key() -> str | None:
+def get_earningscalls_api_key() -> str | None:
     """
-    Load the RapidAPI key from the project .env file.
+    Load the direct EarningsCalls.dev key from the project .env file.
 
     Returning None lets main() print friendly setup instructions instead
     of raising a stack trace when the key has not been configured yet.
@@ -193,7 +188,7 @@ def get_rapidapi_key() -> str | None:
     )
 
     api_key = os.getenv(
-        "RAPIDAPI_KEY",
+        "EARNINGSCALLS_API_KEY",
         "",
     ).strip()
 
@@ -217,15 +212,14 @@ def create_session(
     api_key: str,
 ) -> requests.Session:
     """
-    Create one reusable HTTP session with RapidAPI authentication.
+    Create one reusable HTTP session with provider authentication.
     """
 
     session = requests.Session()
 
     session.headers.update(
         {
-            "X-RapidAPI-Key": api_key,
-            "X-RapidAPI-Host": RAPIDAPI_HOST,
+            "X-API-Key": api_key,
         }
     )
 
@@ -279,7 +273,7 @@ def fetch_json(
         # exceptions could accidentally expose credentials.
         raise RuntimeError(
             f"Stopped on HTTP {response.status_code}. "
-            "Check the RapidAPI key, free-plan activation, "
+            "Check the EarningsCalls.dev key, plan activation, "
             "and remaining quota."
         )
 
@@ -510,24 +504,24 @@ def probe_ticker(
 
 def main() -> int:
     """
-    Run the bounded free-tier diagnostic.
+    Run the bounded API diagnostic.
     """
 
     tickers = get_tickers()
-    api_key = get_rapidapi_key()
+    api_key = get_earningscalls_api_key()
 
     if api_key is None:
         print(
-            "Live test not run: add RAPIDAPI_KEY "
+            "Live test not run: add EARNINGSCALLS_API_KEY "
             "to the project .env file."
         )
 
         print(
-            "Enable the free plan at:"
+            "Subscribe or manage the API plan at:"
         )
 
         print(
-            FREE_PLAN_URL
+            SUBSCRIPTION_URL
         )
 
         return 1
@@ -538,7 +532,7 @@ def main() -> int:
     )
 
     print(
-        f"Free-tier probe: at most {maximum_requests} requests; "
+        f"API probe: at most {maximum_requests} requests; "
         "no automatic retries."
     )
 
@@ -575,7 +569,7 @@ def main() -> int:
             RuntimeError,
         ) as error:
             # A failure stops the probe immediately. Automatic retries could
-            # silently consume the rest of a small free-tier allowance.
+            # silently consume the rest of a monthly request allowance.
             if isinstance(error, RuntimeError):
                 print(
                     str(error)
