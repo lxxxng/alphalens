@@ -148,7 +148,10 @@ class ResearchRequest(BaseModel):
             "form_type": "10-K",
 
             "section_key":
-                "item_1a_risk_factors"
+                "item_1a_risk_factors",
+
+            "source_type":
+                "both"
         }
 
 
@@ -185,7 +188,7 @@ class ResearchRequest(BaseModel):
 
 
     # --------------------------------------------------------
-    # Number of SEC chunks supplied to the generation model
+    # Number of chunks supplied to the generation model
     # --------------------------------------------------------
 
     top_k: int = Field(
@@ -213,6 +216,16 @@ class ResearchRequest(BaseModel):
 
     section_key: Optional[str] = None
 
+    fiscal_period: Optional[str] = None
+
+    source_type: str = Field(
+        default="auto",
+        pattern=(
+            "^(auto|filing|filings|sec|transcript|transcripts|"
+            "earnings|both|all)$"
+        ),
+    )
+
 
 # ============================================================
 # Source Response Model
@@ -220,7 +233,7 @@ class ResearchRequest(BaseModel):
 
 class ResearchSource(BaseModel):
     """
-    One SEC source used by the RAG system.
+    One source used by the RAG system.
 
     Example:
 
@@ -239,15 +252,29 @@ class ResearchSource(BaseModel):
 
     ticker: str
 
-    form_type: str
+    source_type: str = "filing"
 
-    filing_date: str
+    form_type: Optional[str] = None
 
-    accession_number: str
+    filing_date: Optional[str] = None
 
-    section_key: str
+    accession_number: Optional[str] = None
 
-    section_title: str
+    section_key: Optional[str] = None
+
+    section_title: Optional[str] = None
+
+    transcript_id: Optional[int] = None
+
+    fiscal_period: Optional[str] = None
+
+    call_date: Optional[str] = None
+
+    title: Optional[str] = None
+
+    source_url: Optional[str] = None
+
+    speaker_names: Optional[list[str]] = None
 
     chunk_index: int
 
@@ -279,7 +306,7 @@ class ResearchResponse(BaseModel):
 
     response_model=ResearchResponse,
 
-    summary="Research SEC filings",
+    summary="Research AlphaLens sources",
 )
 def research(
     request: ResearchRequest,
@@ -343,6 +370,10 @@ def research(
             form_type=request.form_type,
 
             section_key=request.section_key,
+
+            fiscal_period=request.fiscal_period,
+
+            source_type=request.source_type,
         )
 
 

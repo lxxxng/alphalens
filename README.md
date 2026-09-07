@@ -438,6 +438,24 @@ GROUP BY embedding_status
 ORDER BY embedding_status;
 ```
 
+### Ask RAG Questions Over Transcripts
+
+The research API can search SEC filings, earnings transcripts, or both.
+Use `source_type` to control retrieval:
+
+```json
+{
+  "question": "What did Walmart management say about margins on the earnings call?",
+  "ticker": "WMT",
+  "source_type": "transcripts",
+  "top_k": 5
+}
+```
+
+Supported `source_type` values are `auto`, `filings`, `transcripts`, and
+`both`. In `auto` mode, transcript-style questions search earnings calls,
+SEC-style questions search filings, and broad questions search both.
+
 ## 11. Stop PostgreSQL
 
 Stop PostgreSQL without deleting its data volume:

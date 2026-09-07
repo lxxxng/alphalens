@@ -86,8 +86,8 @@ from dotenv import load_dotenv
 
 from openai import OpenAI
 
-from app.rag.retriever import (
-    semantic_search,
+from app.rag.retrievers.router import (
+    retrieve_evidence,
 )
 
 from app.rag.company_resolver import (
@@ -141,10 +141,10 @@ DEFAULT_RAG_MODEL = "gpt-5-mini"
 
 RAG_INSTRUCTIONS = """
 You are the answer-generation component of AlphaLens,
-an SEC filing research system.
+a financial research system.
 
 Your job is to answer the user's question using ONLY the
-retrieved SEC filing excerpts supplied in the prompt.
+retrieved filing and earnings-call excerpts supplied in the prompt.
 
 Rules:
 
@@ -158,7 +158,7 @@ Rules:
 
 4. If the retrieved excerpts do not contain enough evidence
    to answer the question, clearly say that the retrieved
-   filings do not provide enough information.
+   evidence does not provide enough information.
 
 5. Cite factual claims using the supplied source labels:
 
@@ -188,9 +188,9 @@ Rules:
 12. Do not claim that one company has more or less risk unless
     the supplied evidence supports that comparison.
 
-13. Pay attention to the ticker and filing date attached to
-    each source. Do not attribute one company's statement to
-    another company.
+13. Pay attention to the ticker, filing date, call date, and
+    fiscal period attached to each source. Do not attribute one
+    company's statement to another company.
 """.strip()
 
 
@@ -318,9 +318,33 @@ def format_source(
         f"S{source_number}"
     )
 
+    if result.get("source_type") == "transcript":
+
+        speaker_names = ", ".join(
+            result.get("speaker_names") or []
+        )
+
+        return f"""
+[{source_label}]
+Source type: Earnings call transcript
+Ticker: {result["ticker"]}
+Fiscal period: {result["fiscal_period"]}
+Call date: {result["call_date"]}
+Title: {result["title"]}
+Speakers: {speaker_names}
+Transcript ID: {result["transcript_id"]}
+Chunk ID: {result["chunk_id"]}
+Chunk index: {result["chunk_index"]}
+Similarity score: {result["score"]:.4f}
+
+Content:
+{result["content"]}
+""".strip()
+
 
     return f"""
 [{source_label}]
+Source type: SEC filing
 Ticker: {result["ticker"]}
 Form type: {result["form_type"]}
 Filing date: {result["filing_date"]}
@@ -407,7 +431,7 @@ def build_generation_prompt(
     The prompt contains two major components:
 
         1. User's question
-        2. Retrieved SEC evidence
+        2. Retrieved AlphaLens evidence
 
 
     Why label them clearly?
@@ -418,7 +442,7 @@ def build_generation_prompt(
         QUESTION
             = what needs answering
 
-        RETRIEVED SEC EVIDENCE
+        RETRIEVED ALPHALENS EVIDENCE
             = the only information it should use
     """
 
@@ -429,8 +453,8 @@ USER QUESTION
 {question}
 
 
-RETRIEVED SEC EVIDENCE
-======================
+RETRIEVED ALPHALENS EVIDENCE
+============================
 
 {context}
 
@@ -438,7 +462,7 @@ RETRIEVED SEC EVIDENCE
 ANSWER REQUIREMENTS
 ===================
 
-Answer the user's question using only the SEC evidence above.
+Answer the user's question using only the evidence above.
 
 Cite relevant claims using source labels such as:
 
@@ -446,7 +470,7 @@ Cite relevant claims using source labels such as:
     [S2]
 
 If the evidence does not support a complete answer, explicitly
-state what cannot be determined from the retrieved filings.
+state what cannot be determined from the retrieved evidence.
 """.strip()
 
 
@@ -502,6 +526,12 @@ def build_source_records(
                 "source":
                     f"S{source_number}",
 
+                "source_type":
+                    result.get(
+                        "source_type",
+                        "filing",
+                    ),
+
                 "chunk_id":
                     result["chunk_id"],
 
@@ -509,27 +539,63 @@ def build_source_records(
                     result["ticker"],
 
                 "form_type":
-                    result["form_type"],
+                    result.get(
+                        "form_type"
+                    ),
 
                 "filing_date":
-                    str(
-                        result["filing_date"]
+                    (
+                        str(result["filing_date"])
+                        if result.get("filing_date") is not None
+                        else None
                     ),
 
                 "accession_number":
-                    result[
+                    result.get(
                         "accession_number"
-                    ],
+                    ),
 
                 "section_key":
-                    result[
+                    result.get(
                         "section_key"
-                    ],
+                    ),
 
                 "section_title":
-                    result[
+                    result.get(
                         "section_title"
-                    ],
+                    ),
+
+                "transcript_id":
+                    result.get(
+                        "transcript_id"
+                    ),
+
+                "fiscal_period":
+                    result.get(
+                        "fiscal_period"
+                    ),
+
+                "call_date":
+                    (
+                        str(result["call_date"])
+                        if result.get("call_date") is not None
+                        else None
+                    ),
+
+                "title":
+                    result.get(
+                        "title"
+                    ),
+
+                "source_url":
+                    result.get(
+                        "source_url"
+                    ),
+
+                "speaker_names":
+                    result.get(
+                        "speaker_names"
+                    ),
 
                 "chunk_index":
                     result[
@@ -581,7 +647,7 @@ def generate_grounded_answer(
     if not retrieved_results:
 
         return (
-            "The retrieval system did not find SEC filing "
+            "The retrieval system did not find AlphaLens "
             "evidence relevant to this question."
         )
 
@@ -648,130 +714,6 @@ def generate_grounded_answer(
     return response.output_text.strip()
 
 # ============================================================
-# retrieve_evidence()
-# ============================================================
-
-def retrieve_evidence(
-    question: str,
-    top_k: int,
-    tickers: list[str],
-    form_type: str | None = None,
-    section_key: str | None = None,
-) -> list[dict]:
-    """
-    Retrieve SEC evidence for one or more companies.
-
-    Why retrieve each company separately?
-    -------------------------------------
-
-    Suppose the question is:
-
-        "Compare Microsoft and NVIDIA's AI risks."
-
-    If we perform one global FAISS search, we might get:
-
-        NVDA
-        NVDA
-        NVDA
-        NVDA
-        MSFT
-
-    That gives the LLM much more NVIDIA evidence than
-    Microsoft evidence.
-
-    Instead we run:
-
-        semantic_search(... ticker="MSFT")
-        semantic_search(... ticker="NVDA")
-
-    separately.
-
-    This gives balanced evidence for comparison.
-
-
-    Parameters
-    ----------
-    question:
-        User research question.
-
-    top_k:
-        Number of chunks to retrieve PER COMPANY.
-
-    tickers:
-        Companies detected by company_resolver.py.
-
-        Examples:
-
-            ["NVDA"]
-
-            ["MSFT", "NVDA"]
-
-    form_type:
-        Optional filing filter.
-
-    section_key:
-        Optional section filter.
-
-
-    Returns
-    -------
-    list[dict]
-
-        Combined retrieved SEC chunks.
-    """
-
-    all_results = []
-
-
-    # ========================================================
-    # No company detected
-    # ========================================================
-    #
-    # Example:
-    #
-    #     "What are the most common cybersecurity risks?"
-    #
-    # Search the whole corpus.
-    # ========================================================
-
-    if not tickers:
-
-        return semantic_search(
-            query=question,
-            top_k=top_k,
-            form_type=form_type,
-            section_key=section_key,
-        )
-
-
-    # ========================================================
-    # Company-specific retrieval
-    # ========================================================
-
-    for ticker in tickers:
-
-        results = semantic_search(
-
-            query=question,
-
-            top_k=top_k,
-
-            ticker=ticker,
-
-            form_type=form_type,
-
-            section_key=section_key,
-        )
-
-
-        all_results.extend(
-            results
-        )
-
-
-    return all_results
-
-# ============================================================
 # answer_question()
 # ============================================================
 
@@ -781,6 +723,8 @@ def answer_question(
     ticker: str | None = None,
     form_type: str | None = None,
     section_key: str | None = None,
+    fiscal_period: str | None = None,
+    source_type: str = "auto",
 ) -> dict:
     """
     Run the complete AlphaLens RAG workflow.
@@ -919,6 +863,10 @@ def answer_question(
         form_type=form_type,
 
         section_key=section_key,
+
+        fiscal_period=fiscal_period,
+
+        source_type=source_type,
     )
 
 
@@ -1009,16 +957,32 @@ def print_rag_result(
 
         print()
 
-        print(
-            f"[{source['source']}] "
-            f"{source['ticker']} "
-            f"{source['form_type']} "
-            f"| {source['filing_date']} "
-            f"| {source['section_title']} "
-            f"| chunk {source['chunk_id']} "
-            f"| score "
-            f"{source['similarity_score']}"
-        )
+        if source["source_type"] == "transcript":
+
+            print(
+                f"[{source['source']}] "
+                f"{source['ticker']} "
+                f"earnings call "
+                f"| {source['fiscal_period']} "
+                f"| {source['call_date']} "
+                f"| chunk {source['chunk_id']} "
+                f"| score "
+                f"{source['similarity_score']}"
+            )
+
+
+        else:
+
+            print(
+                f"[{source['source']}] "
+                f"{source['ticker']} "
+                f"{source['form_type']} "
+                f"| {source['filing_date']} "
+                f"| {source['section_title']} "
+                f"| chunk {source['chunk_id']} "
+                f"| score "
+                f"{source['similarity_score']}"
+            )
 
 
 # ============================================================
