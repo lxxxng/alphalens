@@ -13,11 +13,11 @@ Run locally:
 Architecture:
 
 Client
-   ↓
+   ->
 FastAPI
-   ↓
+   ->
 /api/research
-   ↓
+   ->
 AlphaLens RAG
 """
 

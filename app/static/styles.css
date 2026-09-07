@@ -289,10 +289,76 @@ input:focus {
   margin-top: 22px;
 }
 
-#source-count {
+#source-count,
+#market-count {
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
+}
+
+.market-panel {
+  margin-top: 20px;
+}
+
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.market-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 14px;
+}
+
+.market-card-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.market-card-title h4 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.market-card-title span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metric {
+  min-height: 54px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  padding: 8px;
+}
+
+.metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 15px;
 }
 
 .sources-list {

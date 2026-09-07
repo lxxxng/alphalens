@@ -11,19 +11,19 @@ Current AlphaLens RAG flow
 --------------------------
 
 User question
-    ↓
+    ->
 retriever.py
-    ↓
+    ->
 question embedding
-    ↓
+    ->
 FAISS semantic search
-    ↓
+    ->
 PostgreSQL chunk text
-    ↓
+    ->
 generator.py                         <- THIS FILE
-    ↓
+    ->
 LLM
-    ↓
+    ->
 grounded answer with source labels
 
 
@@ -94,6 +94,12 @@ from app.rag.company_resolver import (
     resolve_tickers,
 )
 
+from app.services.market_context import (
+    build_market_context_text,
+    get_market_context,
+    wants_market_context,
+)
+
 
 # ============================================================
 # Environment
@@ -113,7 +119,7 @@ load_dotenv()
 # With chunks around 700 tokens:
 #
 #     5 chunks
-#       ≈
+#       approximately
 #     maximum ~3,500 retrieved tokens
 #
 DEFAULT_TOP_K = 5
@@ -145,6 +151,7 @@ a financial research system.
 
 Your job is to answer the user's question using ONLY the
 retrieved filing and earnings-call excerpts supplied in the prompt.
+When structured market data is supplied, treat it as evidence too.
 
 Rules:
 
@@ -194,6 +201,9 @@ Rules:
 
 14. Use plain ASCII punctuation. Use hyphens instead of em dashes
     or en dashes so API responses display cleanly in terminals.
+
+15. For market data, state the measurement window and distinguish raw
+    returns from benchmark-relative returns.
 """.strip()
 
 
@@ -249,6 +259,47 @@ def get_rag_model() -> str:
         "RAG_MODEL",
         DEFAULT_RAG_MODEL,
     )
+
+
+def wants_text_evidence(
+    question: str,
+    source_type: str,
+) -> bool:
+    """
+    Decide whether vector-retrieved prose evidence is useful.
+    """
+
+    if source_type.lower().strip() != "auto":
+        return True
+
+    lower_question = question.lower()
+
+    # Pure price/performance questions are better answered from structured
+    # market_prices calculations. Pulling arbitrary prose chunks can make
+    # those answers noisier.
+    document_terms = [
+        "filing",
+        "sec",
+        "10-k",
+        "10-q",
+        "risk",
+        "transcript",
+        "earnings call",
+        "management",
+        "analyst",
+        "fundamental",
+        "business",
+        "margin",
+        "revenue",
+    ]
+
+    if wants_market_context(question) and not any(
+        term in lower_question
+        for term in document_terms
+    ):
+        return False
+
+    return True
 
 
 # ============================================================
@@ -427,6 +478,7 @@ def build_context(
 def build_generation_prompt(
     question: str,
     context: str,
+    market_context_text: str = "",
 ) -> str:
     """
     Construct the prompt sent to the answer-generation model.
@@ -434,7 +486,8 @@ def build_generation_prompt(
     The prompt contains two major components:
 
         1. User's question
-        2. Retrieved AlphaLens evidence
+        2. Structured market data, when available
+        3. Retrieved AlphaLens evidence
 
 
     Why label them clearly?
@@ -445,15 +498,30 @@ def build_generation_prompt(
         QUESTION
             = what needs answering
 
+        STRUCTURED MARKET DATA
+            = calculated market metrics from PostgreSQL
+
         RETRIEVED ALPHALENS EVIDENCE
             = the only information it should use
     """
+
+    market_section = (
+        market_context_text
+        if market_context_text
+        else "No structured market data supplied."
+    )
 
     return f"""
 USER QUESTION
 =============
 
 {question}
+
+
+STRUCTURED MARKET DATA
+======================
+
+{market_section}
 
 
 RETRIEVED ALPHALENS EVIDENCE
@@ -636,6 +704,7 @@ def build_source_records(
 def generate_grounded_answer(
     question: str,
     retrieved_results: list[dict],
+    market_context: list[dict] | None = None,
 ) -> str:
     """
     Send retrieved SEC evidence to the OpenAI generation model.
@@ -659,7 +728,12 @@ def generate_grounded_answer(
             [S2]
     """
 
-    if not retrieved_results:
+    if market_context is None:
+
+        market_context = []
+
+
+    if not retrieved_results and not market_context:
 
         return (
             "The retrieval system did not find AlphaLens "
@@ -681,6 +755,10 @@ def generate_grounded_answer(
         retrieved_results
     )
 
+    market_context_text = build_market_context_text(
+        market_context
+    )
+
 
     # ========================================================
     # Build user prompt
@@ -689,6 +767,7 @@ def generate_grounded_answer(
     prompt = build_generation_prompt(
         question=question,
         context=context,
+        market_context_text=market_context_text,
     )
 
 
@@ -758,7 +837,7 @@ def answer_question(
 
         What cybersecurity risks does NVIDIA face?
 
-            ↓
+            ->
 
         detected_tickers = ["NVDA"]
 
@@ -767,7 +846,7 @@ def answer_question(
 
         Compare Microsoft and NVIDIA's AI risks.
 
-            ↓
+            ->
 
         detected_tickers = [
             "MSFT",
@@ -779,11 +858,11 @@ def answer_question(
 
         What cybersecurity risks are commonly discussed?
 
-            ↓
+            ->
 
         detected_tickers = []
 
-            ↓
+            ->
 
         search entire AlphaLens SEC corpus
     """
@@ -839,7 +918,7 @@ def answer_question(
     # A question mentioning 20 companies could cause:
     #
     #     20 retrieval searches
-    #     ×
+    #     times
     #     top_k chunks
     #
     # and create a very large LLM prompt.
@@ -864,29 +943,57 @@ def answer_question(
 
 
     # ========================================================
-    # STEP 2 - RETRIEVE
+    # STEP 2 - STRUCTURED MARKET CONTEXT
+    # ========================================================
+    #
+    # Market prices are numeric data. They are calculated directly from
+    # PostgreSQL and supplied beside retrieved text evidence instead of
+    # being embedded into the vector index.
     # ========================================================
 
-    retrieved_results = retrieve_evidence(
+    market_context = []
 
+    if (
+        detected_tickers
+        and wants_market_context(question)
+    ):
+
+        market_context = get_market_context(
+            detected_tickers
+        )
+
+
+    # ========================================================
+    # STEP 3 - RETRIEVE
+    # ========================================================
+
+    retrieved_results = []
+
+    if wants_text_evidence(
         question=question,
-
-        top_k=top_k,
-
-        tickers=detected_tickers,
-
-        form_type=form_type,
-
-        section_key=section_key,
-
-        fiscal_period=fiscal_period,
-
         source_type=source_type,
-    )
+    ):
+
+        retrieved_results = retrieve_evidence(
+
+            question=question,
+
+            top_k=top_k,
+
+            tickers=detected_tickers,
+
+            form_type=form_type,
+
+            section_key=section_key,
+
+            fiscal_period=fiscal_period,
+
+            source_type=source_type,
+        )
 
 
     # ========================================================
-    # STEP 3 - GENERATE GROUNDED ANSWER
+    # STEP 4 - GENERATE GROUNDED ANSWER
     # ========================================================
 
     answer = generate_grounded_answer(
@@ -894,11 +1001,13 @@ def answer_question(
         question=question,
 
         retrieved_results=retrieved_results,
+
+        market_context=market_context,
     )
 
 
     # ========================================================
-    # STEP 4 - STRUCTURED CITATIONS
+    # STEP 5 - STRUCTURED CITATIONS
     # ========================================================
 
     sources = build_source_records(
@@ -917,6 +1026,9 @@ def answer_question(
 
         "answer":
             answer,
+
+        "market_context":
+            market_context,
 
         "sources":
             sources,

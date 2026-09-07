@@ -2,6 +2,9 @@ const form = document.querySelector("#research-form");
 const answer = document.querySelector("#answer");
 const sources = document.querySelector("#sources");
 const sourceCount = document.querySelector("#source-count");
+const marketPanel = document.querySelector("#market-panel");
+const marketSnapshots = document.querySelector("#market-snapshots");
+const marketCount = document.querySelector("#market-count");
 const statusPill = document.querySelector("#status-pill");
 const resultTitle = document.querySelector("#result-title");
 const submitButton = document.querySelector("#submit-button");
@@ -20,6 +23,11 @@ const samples = [
     question: "What cybersecurity risks does NVIDIA face?",
     ticker: "NVDA",
     source_type: "filings",
+  },
+  {
+    question: "How has NVIDIA stock performed over the last year versus SPY?",
+    ticker: "NVDA",
+    source_type: "auto",
   },
   {
     question: "Compare Walmart filings and earnings call comments about margins.",
@@ -69,6 +77,82 @@ function sourceDetail(source) {
 
 function sourceExcerpt(source) {
   return source.content || "No source text returned.";
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined) {
+    return "N/A";
+  }
+
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function formatNumber(value, maximumFractionDigits = 2) {
+  if (value === null || value === undefined) {
+    return "N/A";
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits,
+  }).format(value);
+}
+
+function metric(label, value) {
+  const item = document.createElement("div");
+  item.className = "metric";
+
+  const labelElement = document.createElement("span");
+  labelElement.textContent = label;
+
+  const valueElement = document.createElement("strong");
+  valueElement.textContent = value;
+
+  item.append(labelElement, valueElement);
+  return item;
+}
+
+function renderMarketContext(items) {
+  marketSnapshots.replaceChildren();
+  marketCount.textContent = String(items.length);
+  marketPanel.hidden = items.length === 0;
+
+  for (const item of items) {
+    const card = document.createElement("article");
+    card.className = "market-card";
+
+    const title = document.createElement("div");
+    title.className = "market-card-title";
+
+    const ticker = document.createElement("h4");
+    ticker.textContent = item.ticker;
+
+    const date = document.createElement("span");
+    date.textContent = item.latest_trading_date;
+
+    title.append(ticker, date);
+
+    const grid = document.createElement("div");
+    grid.className = "metric-grid";
+
+    const returns = item.returns || {};
+    const relative = item.benchmark_relative_returns || {};
+
+    grid.append(
+      metric("Close", formatNumber(item.latest_close)),
+      metric("1M", formatPercent(returns["1M"])),
+      metric("3M", formatPercent(returns["3M"])),
+      metric("1Y", formatPercent(returns["1Y"])),
+      metric(`1Y vs ${item.benchmark_ticker}`, formatPercent(relative["1Y"])),
+      metric("Volatility", formatPercent(item.annualized_volatility)),
+      metric("Avg Volume", formatNumber(item.average_volume_30d, 0)),
+    );
+
+    // Market snapshots are calculated facts, not generated prose. Showing
+    // them separately lets users compare numbers without digging through
+    // the natural-language answer.
+    card.append(title, grid);
+    marketSnapshots.appendChild(card);
+  }
 }
 
 function renderSources(items) {
@@ -206,6 +290,7 @@ form.addEventListener("submit", async (event) => {
   setStatus("Running", "loading");
   resultTitle.textContent = "Searching";
   answer.textContent = "Retrieving evidence and generating the answer...";
+  renderMarketContext([]);
   renderSources([]);
 
   try {
@@ -227,6 +312,7 @@ form.addEventListener("submit", async (event) => {
 
     resultTitle.textContent = "Complete";
     answer.textContent = data.answer;
+    renderMarketContext(data.market_context || []);
     renderSources(data.sources || []);
     setStatus("Done");
   } catch (error) {

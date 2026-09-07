@@ -472,6 +472,28 @@ Then open:
 http://127.0.0.1:8000
 ```
 
+### Market Data In RAG
+
+Market prices are used as structured SQL context, not vector embeddings.
+When a question asks about stock performance, returns, volatility, volume,
+or SPY-relative performance, AlphaLens calculates a `market_context`
+snapshot from `market_prices` and includes it in the answer prompt.
+
+Example:
+
+```json
+{
+  "question": "How has NVIDIA stock performed over the last year versus SPY?",
+  "ticker": "NVDA",
+  "source_type": "auto",
+  "top_k": 3
+}
+```
+
+For pure market-performance questions in `auto` mode, AlphaLens answers from
+the structured market snapshot without pulling unrelated filing/transcript
+chunks into the prompt.
+
 ## 11. Stop PostgreSQL
 
 Stop PostgreSQL without deleting its data volume:

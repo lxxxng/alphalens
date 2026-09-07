@@ -41,23 +41,23 @@ FastAPI turns our Python RAG functions into a backend service.
 Later this allows:
 
     Web frontend
-         ↓
+         ->
     FastAPI
-         ↓
+         ->
     AlphaLens RAG
 
 
 or:
 
     Power BI
-         ↓
+         ->
     FastAPI
 
 
 or:
 
     another application
-         ↓
+         ->
     FastAPI
 
 
@@ -65,21 +65,21 @@ Current architecture
 --------------------
 
 Client
-   ↓
+   ->
 POST /api/research
-   ↓
+   ->
 FastAPI
-   ↓
+   ->
 company_resolver.py
-   ↓
+   ->
 retriever.py
-   ↓
+   ->
 FAISS + PostgreSQL
-   ↓
+   ->
 generator.py
-   ↓
+   ->
 OpenAI
-   ↓
+   ->
 grounded answer
 """
 
@@ -161,7 +161,7 @@ class ResearchRequest(BaseModel):
 
         "NVIDIA"
 
-            ↓
+            ->
 
         NVDA
     """
@@ -238,7 +238,7 @@ class ResearchSource(BaseModel):
     Example:
 
         S1
-            ↓
+            ->
         NVDA
         10-K
         Risk Factors
@@ -287,6 +287,32 @@ class ResearchSource(BaseModel):
     similarity_score: float
 
 
+class MarketSnapshot(BaseModel):
+    """
+    Structured market metrics calculated from market_prices.
+    """
+
+    ticker: str
+
+    latest_trading_date: str
+
+    latest_close: Optional[float] = None
+
+    latest_adjusted_close: Optional[float] = None
+
+    returns: dict[str, Optional[float]]
+
+    benchmark_ticker: str
+
+    benchmark_relative_returns: dict[str, Optional[float]]
+
+    annualized_volatility: Optional[float] = None
+
+    average_volume_30d: Optional[float] = None
+
+    row_count: int
+
+
 # ============================================================
 # Research Response Model
 # ============================================================
@@ -299,6 +325,10 @@ class ResearchResponse(BaseModel):
     question: str
 
     answer: str
+
+    market_context: list[MarketSnapshot] = Field(
+        default_factory=list
+    )
 
     sources: list[ResearchSource]
 
@@ -324,21 +354,21 @@ def research(
     ----
 
         HTTP request
-             ↓
+             ->
         validate JSON
-             ↓
+             ->
         answer_question()
-             ↓
+             ->
         company resolver
-             ↓
+             ->
         semantic retrieval
-             ↓
+             ->
         FAISS
-             ↓
+             ->
         PostgreSQL
-             ↓
+             ->
         grounded generation
-             ↓
+             ->
         JSON response
 
 
