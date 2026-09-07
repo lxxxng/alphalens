@@ -48,10 +48,9 @@ that matches the user's question.
 Important:
     This file creates RAG-ready text chunks.
 
-    It does NOT call OpenAI and does NOT build a FAISS index yet.
-
-    Embedding support can be added as a later transcript embedder, similar
-    to pipelines/sec/embedder.py.
+    It does NOT call OpenAI and does NOT build a FAISS index. Run
+    pipelines/transcripts/embedder.py after chunking to create transcript
+    vectors.
 """
 
 import os

@@ -97,6 +97,7 @@ python -m pipelines.sec.embedder
 # Earnings call transcripts
 python -m pipelines.transcripts.run_pipeline
 python -m pipelines.transcripts.chunker
+python -m pipelines.transcripts.embedder
 
 # Small/resumable transcript test
 python -m pipelines.transcripts.run_pipeline --tickers AAPL --max-transcripts-per-ticker 1
@@ -113,11 +114,15 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 # Transcript counts
 docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT 'earnings_transcripts' AS name, COUNT(*) FROM earnings_transcripts UNION ALL SELECT 'earnings_transcript_turns', COUNT(*) FROM earnings_transcript_turns UNION ALL SELECT 'earnings_transcript_chunks', COUNT(*) FROM earnings_transcript_chunks;"
 
+# Transcript embedding status
+docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT embedding_status, COUNT(*) FROM earnings_transcript_chunks GROUP BY embedding_status ORDER BY embedding_status;"
+
 # Download, parsing, and embedding status
 docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT download_status, parse_status, COUNT(*) FROM filings GROUP BY download_status, parse_status; SELECT embedding_status, COUNT(*) FROM filing_chunks GROUP BY embedding_status;"
 
 # FAISS metadata
 Get-Content data\faiss\sec_chunks.meta.json
+Get-Content data\faiss\transcript_chunks.meta.json
 ```
 
 ## 8. Existing device: update and rerun

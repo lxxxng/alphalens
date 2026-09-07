@@ -384,6 +384,7 @@ test:
 ```powershell
 python -m pipelines.transcripts.run_pipeline --tickers AAPL --max-transcripts-per-ticker 1
 python -m pipelines.transcripts.chunker
+python -m pipelines.transcripts.embedder
 ```
 
 Then run the full configured ticker backfill:
@@ -391,12 +392,14 @@ Then run the full configured ticker backfill:
 ```powershell
 python -m pipelines.transcripts.run_pipeline
 python -m pipelines.transcripts.chunker
+python -m pipelines.transcripts.embedder
 ```
 
 The pipeline stores one row per ticker/fiscal quarter in
 `earnings_transcripts`, normalized speaker turns in
-`earnings_transcript_turns`, and RAG-ready chunks in
-`earnings_transcript_chunks`.
+`earnings_transcript_turns`, RAG-ready chunks in
+`earnings_transcript_chunks`, and transcript vectors in
+`data/faiss/transcript_chunks.faiss`.
 
 ### Verify Earnings Transcripts
 
@@ -422,6 +425,17 @@ SELECT
     ROUND(AVG(token_count), 2) AS average,
     MAX(token_count) AS largest
 FROM earnings_transcript_chunks;
+```
+
+Check transcript embedding status:
+
+```sql
+SELECT
+    embedding_status,
+    COUNT(*)
+FROM earnings_transcript_chunks
+GROUP BY embedding_status
+ORDER BY embedding_status;
 ```
 
 ## 11. Stop PostgreSQL
