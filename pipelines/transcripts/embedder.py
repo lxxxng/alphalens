@@ -495,15 +495,21 @@ def run_embedding_pipeline():
     Build or resume the transcript FAISS index.
     """
 
+    print("Starting transcript embedding pipeline...")
+
     engine = get_database_engine()
     client = get_openai_client()
     metadata = MetaData()
+
+    print("Reflecting earnings_transcript_chunks table...")
 
     chunk_table = Table(
         "earnings_transcript_chunks",
         metadata,
         autoload_with=engine,
     )
+
+    print("Loading transcript chunks from PostgreSQL...")
 
     database_chunks = get_all_chunks(
         engine=engine,
