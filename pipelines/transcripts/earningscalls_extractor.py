@@ -85,6 +85,28 @@ MIN_TRANSCRIPT_CHARS = 500
 
 
 # ============================================================
+# Parsing Helpers
+# ============================================================
+
+def parse_optional_int(
+    value,
+) -> int | None:
+    """
+    Convert provider numeric fields while tolerating missing values.
+    """
+
+    if value is None:
+        return None
+
+    try:
+        return int(
+            value
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+# ============================================================
 # Environment Helpers
 # ============================================================
 
@@ -503,19 +525,27 @@ def normalize_transcript(
     Build one database-ready transcript record.
     """
 
-    fiscal_year = int(
-        details["fiscal_year"]
+    fiscal_year = parse_optional_int(
+        details.get("fiscal_year")
     )
 
-    fiscal_quarter = int(
-        details["fiscal_quarter"]
+    fiscal_quarter = parse_optional_int(
+        details.get("fiscal_quarter")
     )
+
+    if fiscal_year is None or fiscal_quarter is None:
+        print(
+            f"    [SKIP] Call {earnings_call_id} is missing "
+            "fiscal year or quarter"
+        )
+        return None
 
     if fiscal_quarter not in [1, 2, 3, 4]:
-        raise RuntimeError(
-            f"Call {earnings_call_id} has invalid fiscal quarter "
-            f"{fiscal_quarter}."
+        print(
+            f"    [SKIP] Call {earnings_call_id} has invalid "
+            f"fiscal quarter {fiscal_quarter}"
         )
+        return None
 
     content = str(
         transcript.get("full_transcript_text", "")
@@ -560,6 +590,39 @@ def normalize_transcript(
         },
         "turns": turns,
     }
+
+
+def get_call_fiscal_period(
+    details: dict,
+    earnings_call_id: int,
+) -> tuple[int, int] | None:
+    """
+    Return fiscal year and quarter when provider metadata is usable.
+    """
+
+    fiscal_year = parse_optional_int(
+        details.get("fiscal_year")
+    )
+
+    fiscal_quarter = parse_optional_int(
+        details.get("fiscal_quarter")
+    )
+
+    if fiscal_year is None or fiscal_quarter is None:
+        print(
+            f"  [SKIP] Call {earnings_call_id} is missing "
+            "fiscal year or quarter"
+        )
+        return None
+
+    if fiscal_quarter not in [1, 2, 3, 4]:
+        print(
+            f"  [SKIP] Call {earnings_call_id} has invalid "
+            f"fiscal quarter {fiscal_quarter}"
+        )
+        return None
+
+    return fiscal_year, fiscal_quarter
 
 
 # ============================================================
@@ -655,9 +718,15 @@ def extract_earnings_transcripts(
                     request_state=request_state,
                 )
 
-                fiscal_year = int(
-                    details["fiscal_year"]
+                fiscal_period = get_call_fiscal_period(
+                    details=details,
+                    earnings_call_id=earnings_call_id,
                 )
+
+                if fiscal_period is None:
+                    continue
+
+                fiscal_year, fiscal_quarter = fiscal_period
 
                 if not (
                     earliest_fiscal_year
@@ -665,10 +734,6 @@ def extract_earnings_transcripts(
                     <= current_date.year
                 ):
                     continue
-
-                fiscal_quarter = int(
-                    details["fiscal_quarter"]
-                )
 
                 print(
                     f"  Downloading {fiscal_year}Q{fiscal_quarter} "
