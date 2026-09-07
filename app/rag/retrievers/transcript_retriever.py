@@ -117,11 +117,42 @@ def fetch_chunk_metadata(
     return combined_results
 
 
+def get_latest_fiscal_period(
+    engine,
+    transcript_table,
+    ticker: str,
+) -> str | None:
+    """
+    Return the latest stored transcript fiscal period for one ticker.
+    """
+
+    query = (
+        select(
+            transcript_table.c.fiscal_period
+        )
+        .where(
+            transcript_table.c.ticker == ticker.upper()
+        )
+        .order_by(
+            transcript_table.c.fiscal_year.desc(),
+            transcript_table.c.fiscal_quarter.desc(),
+            transcript_table.c.call_date.desc().nullslast(),
+        )
+        .limit(1)
+    )
+
+    with engine.connect() as connection:
+        return connection.execute(
+            query
+        ).scalar_one_or_none()
+
+
 def semantic_search(
     query: str,
     top_k: int = DEFAULT_TOP_K,
     ticker: str | None = None,
     fiscal_period: str | None = None,
+    prefer_latest: bool = False,
 ):
     """
     Search earnings transcript chunks semantically.
@@ -162,6 +193,17 @@ def semantic_search(
         metadata,
         autoload_with=engine,
     )
+
+    if (
+        prefer_latest
+        and ticker is not None
+        and fiscal_period is None
+    ):
+        fiscal_period = get_latest_fiscal_period(
+            engine=engine,
+            transcript_table=transcript_table,
+            ticker=ticker,
+        )
 
     has_filters = any(
         value is not None

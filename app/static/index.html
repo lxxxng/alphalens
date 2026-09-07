@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AlphaLens Research</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="query-panel" aria-labelledby="app-title">
+        <div class="brand-row">
+          <div>
+            <p class="eyebrow">AlphaLens</p>
+            <h1 id="app-title">Research Console</h1>
+          </div>
+          <a class="docs-link" href="/docs">API Docs</a>
+        </div>
+
+        <form id="research-form" class="research-form">
+          <label class="field-label" for="question">Question</label>
+          <textarea
+            id="question"
+            name="question"
+            rows="6"
+            required
+          >What did Walmart management say about margins on the earnings call?</textarea>
+
+          <div class="control-grid">
+            <label class="control">
+              <span>Ticker</span>
+              <input
+                id="ticker"
+                name="ticker"
+                value="WMT"
+                maxlength="10"
+                autocomplete="off"
+              >
+            </label>
+
+            <label class="control">
+              <span>Fiscal Period</span>
+              <input
+                id="fiscal-period"
+                name="fiscal_period"
+                placeholder="Latest"
+                maxlength="6"
+                autocomplete="off"
+              >
+            </label>
+
+            <label class="control">
+              <span>Top K</span>
+              <input
+                id="top-k"
+                name="top_k"
+                type="number"
+                min="1"
+                max="20"
+                value="3"
+              >
+            </label>
+          </div>
+
+          <fieldset class="source-picker">
+            <legend>Sources</legend>
+            <label>
+              <input type="radio" name="source_type" value="auto">
+              <span>Auto</span>
+            </label>
+            <label>
+              <input type="radio" name="source_type" value="filings">
+              <span>Filings</span>
+            </label>
+            <label>
+              <input type="radio" name="source_type" value="transcripts" checked>
+              <span>Transcripts</span>
+            </label>
+            <label>
+              <input type="radio" name="source_type" value="both">
+              <span>Both</span>
+            </label>
+          </fieldset>
+
+          <button id="submit-button" class="primary-button" type="submit">
+            Search
+          </button>
+        </form>
+      </section>
+
+      <section class="answer-panel" aria-live="polite">
+        <div class="answer-header">
+          <div>
+            <p class="eyebrow">Answer</p>
+            <h2 id="result-title">Ready</h2>
+          </div>
+          <span id="status-pill" class="status-pill">Idle</span>
+        </div>
+
+        <article id="answer" class="answer-text">
+          Ask a question to search SEC filings, earnings call transcripts, or both.
+        </article>
+
+        <div class="sources-header">
+          <h3>Sources</h3>
+          <span id="source-count">0</span>
+        </div>
+        <div id="sources" class="sources-list"></div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

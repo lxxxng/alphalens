@@ -191,6 +191,9 @@ Rules:
 13. Pay attention to the ticker, filing date, call date, and
     fiscal period attached to each source. Do not attribute one
     company's statement to another company.
+
+14. Use plain ASCII punctuation. Use hyphens instead of em dashes
+    or en dashes so API responses display cleanly in terminals.
 """.strip()
 
 

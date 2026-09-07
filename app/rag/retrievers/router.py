@@ -107,6 +107,56 @@ def resolve_source_types(
     return ["filings", "transcripts"]
 
 
+def should_prefer_latest_transcript(
+    question: str,
+    fiscal_period: str | None = None,
+) -> bool:
+    """
+    Return True when a transcript question implies one recent call.
+    """
+
+    if fiscal_period is not None:
+        return False
+
+    lower_question = question.lower()
+
+    history_terms = [
+        "over time",
+        "historical",
+        "history",
+        "trend",
+        "trends",
+        "all calls",
+        "calls",
+        "previous calls",
+        "past calls",
+    ]
+
+    if any(term in lower_question for term in history_terms):
+        return False
+
+    latest_terms = [
+        "latest",
+        "most recent",
+        "recent",
+        "last quarter",
+        "this quarter",
+    ]
+
+    singular_call_terms = [
+        "the earnings call",
+        "the call",
+        "on earnings call",
+        "management say",
+        "management said",
+    ]
+
+    return any(
+        term in lower_question
+        for term in latest_terms + singular_call_terms
+    )
+
+
 def semantic_search(
     query: str,
     top_k: int = 5,
@@ -115,6 +165,7 @@ def semantic_search(
     section_key: str | None = None,
     fiscal_period: str | None = None,
     corpus: str = "filings",
+    prefer_latest: bool = False,
 ):
     """
     Search one corpus while preserving the old retriever interface.
@@ -130,6 +181,7 @@ def semantic_search(
             top_k=top_k,
             ticker=ticker,
             fiscal_period=fiscal_period,
+            prefer_latest=prefer_latest,
         )
 
     return sec_retriever.semantic_search(
@@ -160,6 +212,11 @@ def retrieve_evidence(
         source_type=source_type,
     )
 
+    prefer_latest_transcript = should_prefer_latest_transcript(
+        question=question,
+        fiscal_period=fiscal_period,
+    )
+
     if not tickers:
         for current_source_type in source_types:
             all_results.extend(
@@ -170,6 +227,10 @@ def retrieve_evidence(
                     section_key=section_key,
                     fiscal_period=fiscal_period,
                     corpus=current_source_type,
+                    prefer_latest=(
+                        current_source_type == "transcripts"
+                        and prefer_latest_transcript
+                    ),
                 )
             )
 
@@ -186,6 +247,10 @@ def retrieve_evidence(
                     section_key=section_key,
                     fiscal_period=fiscal_period,
                     corpus=current_source_type,
+                    prefer_latest=(
+                        current_source_type == "transcripts"
+                        and prefer_latest_transcript
+                    ),
                 )
             )
 

@@ -22,10 +22,20 @@ AlphaLens RAG
 """
 
 
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.research import (
     router as research_router,
+)
+
+
+STATIC_DIRECTORY = (
+    Path(__file__).resolve().parent
+    / "static"
 )
 
 
@@ -39,7 +49,7 @@ app = FastAPI(
 
     description=(
         "AI-powered equity research using "
-        "SEC filings, semantic retrieval and RAG."
+        "SEC filings, earnings transcripts, semantic retrieval and RAG."
     ),
 
     version="0.1.0",
@@ -58,6 +68,13 @@ app = FastAPI(
 
 app.include_router(
     research_router
+)
+
+
+app.mount(
+    "/static",
+    StaticFiles(directory=STATIC_DIRECTORY),
+    name="static",
 )
 
 
@@ -102,11 +119,9 @@ def health():
 )
 def root():
     """
-    Basic API landing endpoint.
+    Serve the AlphaLens research UI.
     """
 
-    return {
-        "name": "AlphaLens API",
-        "version": "0.1.0",
-        "docs": "/docs",
-    }
+    return FileResponse(
+        STATIC_DIRECTORY / "index.html"
+    )

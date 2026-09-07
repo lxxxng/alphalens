@@ -120,6 +120,9 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 # Transcript RAG retrieval smoke test
 .\.venv\Scripts\python.exe -c "from app.rag.retriever import semantic_search; results=semantic_search('What did Walmart management say about margins on the earnings call?', top_k=3, ticker='WMT', corpus='transcripts'); print([(r['source_type'], r['ticker'], r['fiscal_period'], r['chunk_id'], round(r['score'], 4)) for r in results])"
 
+# Local research UI
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
 # Download, parsing, and embedding status
 docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT download_status, parse_status, COUNT(*) FROM filings GROUP BY download_status, parse_status; SELECT embedding_status, COUNT(*) FROM filing_chunks GROUP BY embedding_status;"
 
