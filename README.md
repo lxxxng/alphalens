@@ -40,7 +40,10 @@ Review `.env` and set the required database and SEC values:
 ```text
 DATABASE_URL=postgresql+psycopg2://alphalens:password@localhost:5432/alphalens
 SEC_USER_AGENT=AlphaLens your-email@example.com
-ALPHA_VANTAGE_API_KEY=your-alpha-vantage-api-key
+EARNINGSCALLS_API_KEY=your-earningscalls-dev-api-key
+TRANSCRIPT_LOOKBACK_YEARS=5
+EARNINGSCALLS_REQUEST_SECONDS=3.1
+OPENAI_API_KEY=your-openai-api-key
 ```
 
 ## 2. Start PostgreSQL
@@ -374,8 +377,16 @@ token_range | chunks
 
 ## 10. Run Earnings Transcripts
 
-AlphaLens uses Alpha Vantage's `EARNINGS_CALL_TRANSCRIPT` endpoint for
-quarterly earnings calls. Set `ALPHA_VANTAGE_API_KEY` in `.env`, then run:
+AlphaLens uses the official EarningsCalls.dev API for quarterly earnings
+calls. Set `EARNINGSCALLS_API_KEY` in `.env`, then run a small resumable
+test:
+
+```powershell
+python -m pipelines.transcripts.run_pipeline --tickers AAPL --max-transcripts-per-ticker 1
+python -m pipelines.transcripts.chunker
+```
+
+Then run the full configured ticker backfill:
 
 ```powershell
 python -m pipelines.transcripts.run_pipeline
