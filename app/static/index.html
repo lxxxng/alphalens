@@ -36,24 +36,43 @@
           <div class="control-grid">
             <label class="control">
               <span>Ticker</span>
-              <input
+              <select
                 id="ticker"
                 name="ticker"
-                value="WMT"
-                maxlength="10"
-                autocomplete="off"
               >
+                <option value="WMT">WMT</option>
+                <option value="NVDA">NVDA</option>
+              </select>
             </label>
 
             <label class="control">
               <span>Fiscal Period</span>
-              <input
+              <select
                 id="fiscal-period"
                 name="fiscal_period"
-                placeholder="Latest"
-                maxlength="6"
-                autocomplete="off"
               >
+                <option value="">Latest</option>
+              </select>
+            </label>
+
+            <label class="control">
+              <span>Filing Type</span>
+              <select
+                id="form-type"
+                name="form_type"
+              >
+                <option value="">Any</option>
+              </select>
+            </label>
+
+            <label class="control wide">
+              <span>Section</span>
+              <select
+                id="section-key"
+                name="section_key"
+              >
+                <option value="">Any</option>
+              </select>
             </label>
 
             <label class="control">

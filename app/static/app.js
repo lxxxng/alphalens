@@ -10,6 +10,10 @@ const resultTitle = document.querySelector("#result-title");
 const submitButton = document.querySelector("#submit-button");
 const copyButton = document.querySelector("#copy-button");
 const sampleButton = document.querySelector("#sample-button");
+const tickerSelect = document.querySelector("#ticker");
+const fiscalPeriodSelect = document.querySelector("#fiscal-period");
+const formTypeSelect = document.querySelector("#form-type");
+const sectionKeySelect = document.querySelector("#section-key");
 
 // A few grounded examples make the UI useful immediately after startup.
 // They also double as quick manual smoke tests for each retrieval mode.
@@ -23,6 +27,7 @@ const samples = [
     question: "What cybersecurity risks does NVIDIA face?",
     ticker: "NVDA",
     source_type: "filings",
+    form_type: "10-K",
   },
   {
     question: "How has NVIDIA stock performed over the last year versus SPY?",
@@ -37,6 +42,7 @@ const samples = [
 ];
 
 let sampleIndex = 0;
+let metadataReady = false;
 
 function setStatus(label, state = "") {
   statusPill.textContent = label;
@@ -77,6 +83,217 @@ function sourceDetail(source) {
 
 function sourceExcerpt(source) {
   return source.content || "No source text returned.";
+}
+
+function clearOptions(select, emptyLabel) {
+  select.replaceChildren();
+
+  const option = document.createElement("option");
+  option.value = "";
+  option.textContent = emptyLabel;
+  select.appendChild(option);
+}
+
+function appendOption(select, value, label) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  select.appendChild(option);
+}
+
+function setSelectValue(select, value) {
+  if (!value) {
+    select.value = "";
+    return;
+  }
+
+  const exists = [...select.options].some(
+    (option) => option.value === value
+  );
+
+  if (exists) {
+    select.value = value;
+  }
+}
+
+function selectedSourceType() {
+  return formDataSourceType(
+    new FormData(form)
+  );
+}
+
+function formDataSourceType(formData) {
+  return formData.get("source_type") || "auto";
+}
+
+function updateFilterState() {
+  const sourceType = selectedSourceType();
+  const filingOnly = sourceType === "filings";
+  const transcriptOnly = sourceType === "transcripts";
+
+  fiscalPeriodSelect.disabled = filingOnly;
+  formTypeSelect.disabled = transcriptOnly;
+  sectionKeySelect.disabled = transcriptOnly;
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Metadata request failed: ${url}`);
+  }
+
+  return response.json();
+}
+
+async function loadTickers() {
+  const previousValue = tickerSelect.value || "WMT";
+  const data = await fetchJson("/api/metadata/tickers");
+
+  clearOptions(tickerSelect, "Any ticker");
+
+  for (const item of data.tickers || []) {
+    const badges = [
+      item.filing_count ? "filings" : null,
+      item.transcript_count ? "calls" : null,
+      item.market_price_count ? "prices" : null,
+    ].filter(Boolean).join(", ");
+
+    const label = [
+      item.ticker,
+      item.company_name,
+      badges ? `(${badges})` : null,
+    ].filter(Boolean).join(" - ");
+
+    appendOption(
+      tickerSelect,
+      item.ticker,
+      label
+    );
+  }
+
+  setSelectValue(
+    tickerSelect,
+    previousValue
+  );
+}
+
+async function loadTranscriptPeriods(ticker) {
+  clearOptions(fiscalPeriodSelect, "Latest");
+
+  if (!ticker) {
+    return;
+  }
+
+  const params = new URLSearchParams({
+    ticker,
+  });
+
+  const data = await fetchJson(
+    `/api/metadata/transcript-periods?${params}`
+  );
+
+  for (const item of data.periods || []) {
+    const label = [
+      item.fiscal_period,
+      item.call_date,
+    ].filter(Boolean).join(" - ");
+
+    appendOption(
+      fiscalPeriodSelect,
+      item.fiscal_period,
+      label
+    );
+  }
+}
+
+async function loadFilingTypes(ticker) {
+  const previousValue = formTypeSelect.value;
+  clearOptions(formTypeSelect, "Any");
+
+  const params = new URLSearchParams();
+
+  if (ticker) {
+    params.set("ticker", ticker);
+  }
+
+  const data = await fetchJson(
+    `/api/metadata/filing-types?${params}`
+  );
+
+  for (const item of data.form_types || []) {
+    appendOption(
+      formTypeSelect,
+      item.form_type,
+      `${item.form_type} (${item.filing_count})`
+    );
+  }
+
+  setSelectValue(
+    formTypeSelect,
+    previousValue
+  );
+}
+
+async function loadFilingSections(ticker, formType) {
+  const previousValue = sectionKeySelect.value;
+  clearOptions(sectionKeySelect, "Any");
+
+  const params = new URLSearchParams();
+
+  if (ticker) {
+    params.set("ticker", ticker);
+  }
+
+  if (formType) {
+    params.set("form_type", formType);
+  }
+
+  const data = await fetchJson(
+    `/api/metadata/filing-sections?${params}`
+  );
+
+  for (const item of data.sections || []) {
+    appendOption(
+      sectionKeySelect,
+      item.section_key,
+      `${item.section_title || item.section_key} (${item.chunk_count})`
+    );
+  }
+
+  setSelectValue(
+    sectionKeySelect,
+    previousValue
+  );
+}
+
+async function loadFiltersForTicker(ticker) {
+  setStatus("Loading");
+
+  await Promise.all([
+    loadTranscriptPeriods(ticker),
+    loadFilingTypes(ticker),
+  ]);
+
+  await loadFilingSections(
+    ticker,
+    formTypeSelect.value
+  );
+
+  updateFilterState();
+  setStatus("Idle");
+}
+
+async function initializeMetadata() {
+  try {
+    await loadTickers();
+    await loadFiltersForTicker(tickerSelect.value);
+    metadataReady = true;
+  } catch (error) {
+    // If metadata cannot load, the hard-coded fallback options still let
+    // the page submit normal research requests.
+    setStatus("Metadata unavailable", "error");
+  }
 }
 
 function formatPercent(value) {
@@ -226,12 +443,20 @@ function payloadFromForm(formData) {
   // strings should mean "let the backend decide".
   const payload = {
     question: formData.get("question").trim(),
-    source_type: formData.get("source_type"),
+    source_type: formDataSourceType(formData),
     top_k: Number(formData.get("top_k") || 5),
   };
 
-  const ticker = formData.get("ticker").trim().toUpperCase();
-  const fiscalPeriod = formData.get("fiscal_period").trim().toUpperCase();
+  const ticker = (formData.get("ticker") || "").trim().toUpperCase();
+  const fiscalPeriod = (
+    formData.get("fiscal_period") || ""
+  ).trim().toUpperCase();
+  const formType = (
+    formData.get("form_type") || ""
+  ).trim().toUpperCase();
+  const sectionKey = (
+    formData.get("section_key") || ""
+  ).trim();
 
   if (ticker) {
     payload.ticker = ticker;
@@ -239,6 +464,14 @@ function payloadFromForm(formData) {
 
   if (fiscalPeriod) {
     payload.fiscal_period = fiscalPeriod;
+  }
+
+  if (formType) {
+    payload.form_type = formType;
+  }
+
+  if (sectionKey) {
+    payload.section_key = sectionKey;
   }
 
   return payload;
@@ -252,7 +485,7 @@ function setSourceType(value) {
   }
 }
 
-sampleButton.addEventListener("click", () => {
+sampleButton.addEventListener("click", async () => {
   // Cycle through examples instead of replacing the form with a menu.
   // It keeps the interface small while covering the main source modes.
   const sample = samples[sampleIndex % samples.length];
@@ -260,9 +493,42 @@ sampleButton.addEventListener("click", () => {
 
   form.elements.question.value = sample.question;
   form.elements.ticker.value = sample.ticker;
-  form.elements.fiscal_period.value = "";
   setSourceType(sample.source_type);
+
+  if (metadataReady) {
+    await loadFiltersForTicker(sample.ticker);
+  }
+
+  form.elements.fiscal_period.value = sample.fiscal_period || "";
+  form.elements.form_type.value = sample.form_type || "";
+
+  if (metadataReady) {
+    await loadFilingSections(
+      sample.ticker,
+      form.elements.form_type.value
+    );
+  }
+
+  form.elements.section_key.value = sample.section_key || "";
+  updateFilterState();
 });
+
+tickerSelect.addEventListener("change", async () => {
+  await loadFiltersForTicker(
+    tickerSelect.value
+  );
+});
+
+formTypeSelect.addEventListener("change", async () => {
+  await loadFilingSections(
+    tickerSelect.value,
+    formTypeSelect.value
+  );
+});
+
+for (const radio of form.querySelectorAll("input[name='source_type']")) {
+  radio.addEventListener("change", updateFilterState);
+}
 
 copyButton.addEventListener("click", async () => {
   const text = answer.textContent.trim();
@@ -278,6 +544,8 @@ copyButton.addEventListener("click", async () => {
     setStatus("Copy failed", "error");
   }
 });
+
+initializeMetadata();
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();

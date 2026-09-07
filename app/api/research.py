@@ -88,6 +88,7 @@ from typing import Optional
 from fastapi import (
     APIRouter,
     HTTPException,
+    Query,
 )
 
 from pydantic import (
@@ -97,6 +98,13 @@ from pydantic import (
 
 from app.rag.generator import (
     answer_question,
+)
+
+from app.services.metadata import (
+    get_available_tickers,
+    get_filing_sections,
+    get_filing_types,
+    get_transcript_periods,
 )
 
 
@@ -313,6 +321,104 @@ class MarketSnapshot(BaseModel):
     row_count: int
 
 
+class TickerMetadata(BaseModel):
+    """
+    One ticker available in the local AlphaLens database.
+    """
+
+    ticker: str
+
+    company_name: Optional[str] = None
+
+    filing_count: int
+
+    transcript_count: int
+
+    market_price_count: int
+
+
+class TickersResponse(BaseModel):
+    """
+    Ticker choices for the research form.
+    """
+
+    tickers: list[TickerMetadata]
+
+
+class TranscriptPeriodMetadata(BaseModel):
+    """
+    One earnings-call period available for a ticker.
+    """
+
+    fiscal_period: str
+
+    fiscal_year: int
+
+    fiscal_quarter: int
+
+    call_date: Optional[str] = None
+
+    title: Optional[str] = None
+
+    turn_count: int
+
+    char_count: int
+
+
+class TranscriptPeriodsResponse(BaseModel):
+    """
+    Transcript period choices for one ticker.
+    """
+
+    ticker: str
+
+    periods: list[TranscriptPeriodMetadata]
+
+
+class FilingTypeMetadata(BaseModel):
+    """
+    One SEC filing type available in the corpus.
+    """
+
+    form_type: str
+
+    filing_count: int
+
+
+class FilingTypesResponse(BaseModel):
+    """
+    SEC filing type choices for the research form.
+    """
+
+    ticker: Optional[str] = None
+
+    form_types: list[FilingTypeMetadata]
+
+
+class FilingSectionMetadata(BaseModel):
+    """
+    One SEC section filter available in filing chunks.
+    """
+
+    section_key: str
+
+    section_title: Optional[str] = None
+
+    chunk_count: int
+
+
+class FilingSectionsResponse(BaseModel):
+    """
+    SEC section choices for the research form.
+    """
+
+    ticker: Optional[str] = None
+
+    form_type: Optional[str] = None
+
+    sections: list[FilingSectionMetadata]
+
+
 # ============================================================
 # Research Response Model
 # ============================================================
@@ -474,4 +580,170 @@ def research(
                 "AlphaLens could not complete the "
                 "research request."
             ),
+        ) from error
+
+
+# ============================================================
+# Metadata Endpoints
+# ============================================================
+
+@router.get(
+    "/metadata/tickers",
+    response_model=TickersResponse,
+    summary="List available tickers",
+)
+def metadata_tickers():
+    """
+    Return tickers that have local AlphaLens data.
+    """
+
+    try:
+        return {
+            "tickers": get_available_tickers()
+        }
+    except Exception as error:
+        print(
+            f"[API ERROR] "
+            f"/api/metadata/tickers: "
+            f"{error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not load ticker metadata.",
+        ) from error
+
+
+@router.get(
+    "/metadata/transcript-periods",
+    response_model=TranscriptPeriodsResponse,
+    summary="List transcript periods for a ticker",
+)
+def metadata_transcript_periods(
+    ticker: str = Query(
+        ...,
+        min_length=1,
+        max_length=20,
+    ),
+):
+    """
+    Return stored earnings-call periods for one ticker.
+    """
+
+    normalized_ticker = ticker.upper()
+
+    try:
+        return {
+            "ticker": normalized_ticker,
+            "periods": get_transcript_periods(
+                normalized_ticker
+            ),
+        }
+    except Exception as error:
+        print(
+            f"[API ERROR] "
+            f"/api/metadata/transcript-periods: "
+            f"{error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not load transcript periods.",
+        ) from error
+
+
+@router.get(
+    "/metadata/filing-types",
+    response_model=FilingTypesResponse,
+    summary="List SEC filing types",
+)
+def metadata_filing_types(
+    ticker: Optional[str] = Query(
+        default=None,
+        min_length=1,
+        max_length=20,
+    ),
+):
+    """
+    Return available SEC filing types, optionally for one ticker.
+    """
+
+    normalized_ticker = (
+        ticker.upper()
+        if ticker
+        else None
+    )
+
+    try:
+        return {
+            "ticker": normalized_ticker,
+            "form_types": get_filing_types(
+                normalized_ticker
+            ),
+        }
+    except Exception as error:
+        print(
+            f"[API ERROR] "
+            f"/api/metadata/filing-types: "
+            f"{error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not load filing types.",
+        ) from error
+
+
+@router.get(
+    "/metadata/filing-sections",
+    response_model=FilingSectionsResponse,
+    summary="List SEC filing sections",
+)
+def metadata_filing_sections(
+    ticker: Optional[str] = Query(
+        default=None,
+        min_length=1,
+        max_length=20,
+    ),
+    form_type: Optional[str] = Query(
+        default=None,
+        min_length=1,
+        max_length=10,
+    ),
+):
+    """
+    Return available filing section filters.
+    """
+
+    normalized_ticker = (
+        ticker.upper()
+        if ticker
+        else None
+    )
+
+    normalized_form_type = (
+        form_type.upper()
+        if form_type
+        else None
+    )
+
+    try:
+        return {
+            "ticker": normalized_ticker,
+            "form_type": normalized_form_type,
+            "sections": get_filing_sections(
+                ticker=normalized_ticker,
+                form_type=normalized_form_type,
+            ),
+        }
+    except Exception as error:
+        print(
+            f"[API ERROR] "
+            f"/api/metadata/filing-sections: "
+            f"{error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not load filing sections.",
         ) from error

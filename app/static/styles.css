@@ -33,6 +33,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -144,7 +145,8 @@ h3 {
 }
 
 textarea,
-input {
+input,
+select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -160,21 +162,33 @@ textarea {
   line-height: 1.5;
 }
 
-input {
+input,
+select {
   height: 40px;
   padding: 0 10px;
 }
 
+select:disabled {
+  color: #94a093;
+  background: #f1f4ef;
+  cursor: not-allowed;
+}
+
 textarea:focus,
-input:focus {
+input:focus,
+select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(17, 107, 85, 0.13);
 }
 
 .control-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 88px;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) 88px;
   gap: 10px;
+}
+
+.control.wide {
+  grid-column: span 2;
 }
 
 .control {
@@ -498,5 +512,9 @@ input:focus {
   .control-grid,
   .source-picker {
     grid-template-columns: 1fr;
+  }
+
+  .control.wide {
+    grid-column: auto;
   }
 }

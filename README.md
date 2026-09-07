@@ -472,6 +472,17 @@ Then open:
 http://127.0.0.1:8000
 ```
 
+The UI loads its dropdown choices from metadata endpoints:
+
+```text
+GET /api/metadata/tickers
+GET /api/metadata/transcript-periods?ticker=WMT
+GET /api/metadata/filing-types?ticker=NVDA
+GET /api/metadata/filing-sections?ticker=NVDA&form_type=10-K
+```
+
+These routes read the local database and do not call OpenAI.
+
 ### Market Data In RAG
 
 Market prices are used as structured SQL context, not vector embeddings.

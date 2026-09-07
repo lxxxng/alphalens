@@ -123,6 +123,12 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 # Local research UI
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
+# UI metadata smoke tests
+Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/tickers"
+Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/transcript-periods?ticker=WMT"
+Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/filing-types?ticker=NVDA"
+Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/filing-sections?ticker=NVDA&form_type=10-K"
+
 # Market context smoke test
 .\.venv\Scripts\python.exe -c "from app.services.market_context import get_market_context, build_market_context_text; data=get_market_context(['NVDA']); print(data[0]['ticker'], data[0]['latest_trading_date'], round(data[0]['returns']['1Y'], 4)); print(build_market_context_text(data).splitlines()[:5])"
 
