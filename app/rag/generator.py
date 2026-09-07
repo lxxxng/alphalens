@@ -605,6 +605,18 @@ def build_source_records(
                         "chunk_index"
                     ],
 
+                # The frontend uses this to expose the exact retrieved
+                # evidence behind each citation card.
+                "token_count":
+                    result.get(
+                        "token_count"
+                    ),
+
+                "content":
+                    result.get(
+                        "content"
+                    ),
+
                 "similarity_score":
                     round(
                         result["score"],

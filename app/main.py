@@ -71,6 +71,8 @@ app.include_router(
 )
 
 
+# Serve the lightweight browser UI from the same FastAPI process as the API.
+# That keeps local development simple and avoids a separate frontend server.
 app.mount(
     "/static",
     StaticFiles(directory=STATIC_DIRECTORY),

@@ -278,6 +278,12 @@ class ResearchSource(BaseModel):
 
     chunk_index: int
 
+    # Returned so the UI can show the exact evidence behind a citation.
+    # This makes RAG answers auditable instead of being a black box.
+    token_count: Optional[int] = None
+
+    content: Optional[str] = None
+
     similarity_score: float
 
 

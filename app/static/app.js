@@ -5,6 +5,30 @@ const sourceCount = document.querySelector("#source-count");
 const statusPill = document.querySelector("#status-pill");
 const resultTitle = document.querySelector("#result-title");
 const submitButton = document.querySelector("#submit-button");
+const copyButton = document.querySelector("#copy-button");
+const sampleButton = document.querySelector("#sample-button");
+
+// A few grounded examples make the UI useful immediately after startup.
+// They also double as quick manual smoke tests for each retrieval mode.
+const samples = [
+  {
+    question: "What did Walmart management say about margins on the earnings call?",
+    ticker: "WMT",
+    source_type: "transcripts",
+  },
+  {
+    question: "What cybersecurity risks does NVIDIA face?",
+    ticker: "NVDA",
+    source_type: "filings",
+  },
+  {
+    question: "Compare Walmart filings and earnings call comments about margins.",
+    ticker: "WMT",
+    source_type: "both",
+  },
+];
+
+let sampleIndex = 0;
 
 function setStatus(label, state = "") {
   statusPill.textContent = label;
@@ -43,13 +67,22 @@ function sourceDetail(source) {
   ].filter(Boolean).join(" | ");
 }
 
+function sourceExcerpt(source) {
+  return source.content || "No source text returned.";
+}
+
 function renderSources(items) {
   sources.replaceChildren();
   sourceCount.textContent = String(items.length);
 
   for (const item of items) {
-    const element = document.createElement("article");
+    // <details> gives us accessible expand/collapse behavior without
+    // custom state management.
+    const element = document.createElement("details");
     element.className = "source-item";
+
+    const summary = document.createElement("summary");
+    summary.className = "source-summary";
 
     const meta = document.createElement("div");
     meta.className = "source-meta";
@@ -66,6 +99,9 @@ function renderSources(items) {
       meta.appendChild(tag);
     }
 
+    const summaryText = document.createElement("div");
+    summaryText.className = "source-summary-text";
+
     const title = document.createElement("p");
     title.className = "source-title";
     title.textContent = sourceLabel(item);
@@ -74,12 +110,36 @@ function renderSources(items) {
     detail.className = "source-detail";
     detail.textContent = sourceDetail(item);
 
-    element.append(meta, title, detail);
+    summaryText.append(title, detail);
+    summary.append(meta, summaryText);
+
+    // The API returns the exact chunk sent to the answer generator.
+    // Keeping it collapsed by default makes the page scan-friendly while
+    // still making every citation auditable.
+    const content = document.createElement("pre");
+    content.className = "source-content";
+    content.textContent = sourceExcerpt(item);
+
+    const footer = document.createElement("div");
+    footer.className = "source-footer";
+
+    for (const value of [
+      item.token_count ? `${item.token_count} tokens` : null,
+      item.source_url || null,
+    ].filter(Boolean)) {
+      const span = document.createElement("span");
+      span.textContent = value;
+      footer.appendChild(span);
+    }
+
+    element.append(summary, content, footer);
     sources.appendChild(element);
   }
 }
 
 function payloadFromForm(formData) {
+  // Only send optional filters when the user has supplied them. Empty
+  // strings should mean "let the backend decide".
   const payload = {
     question: formData.get("question").trim(),
     source_type: formData.get("source_type"),
@@ -100,6 +160,41 @@ function payloadFromForm(formData) {
   return payload;
 }
 
+function setSourceType(value) {
+  const radio = form.querySelector(`input[name="source_type"][value="${value}"]`);
+
+  if (radio) {
+    radio.checked = true;
+  }
+}
+
+sampleButton.addEventListener("click", () => {
+  // Cycle through examples instead of replacing the form with a menu.
+  // It keeps the interface small while covering the main source modes.
+  const sample = samples[sampleIndex % samples.length];
+  sampleIndex += 1;
+
+  form.elements.question.value = sample.question;
+  form.elements.ticker.value = sample.ticker;
+  form.elements.fiscal_period.value = "";
+  setSourceType(sample.source_type);
+});
+
+copyButton.addEventListener("click", async () => {
+  const text = answer.textContent.trim();
+
+  if (!text) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus("Copied");
+  } catch (error) {
+    setStatus("Copy failed", "error");
+  }
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -114,6 +209,8 @@ form.addEventListener("submit", async (event) => {
   renderSources([]);
 
   try {
+    // The static UI is served by the same FastAPI app, so a relative URL
+    // works locally and keeps deployment simple later.
     const response = await fetch("/api/research", {
       method: "POST",
       headers: {

@@ -126,6 +126,8 @@ def get_latest_fiscal_period(
     Return the latest stored transcript fiscal period for one ticker.
     """
 
+    # Prefer fiscal year/quarter ordering over call_date alone because
+    # fiscal calendars do not always line up neatly with calendar dates.
     query = (
         select(
             transcript_table.c.fiscal_period
@@ -199,6 +201,9 @@ def semantic_search(
         and ticker is not None
         and fiscal_period is None
     ):
+        # The router sets prefer_latest only for questions that imply a
+        # single recent call. Applying it here keeps the SQL detail close
+        # to the transcript schema.
         fiscal_period = get_latest_fiscal_period(
             engine=engine,
             transcript_table=transcript_table,

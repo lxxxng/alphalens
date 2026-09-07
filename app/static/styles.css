@@ -3,13 +3,16 @@
   --bg: #f7f8f5;
   --surface: #ffffff;
   --surface-muted: #eef2ea;
+  --surface-strong: #17211e;
   --text: #202420;
   --muted: #637062;
   --line: #d8dfd4;
   --accent: #116b55;
   --accent-strong: #0a4f40;
+  --accent-soft: #dce9e2;
   --amber: #b7791f;
   --blue: #245c91;
+  --blue-soft: #e3edf7;
   --danger: #a73535;
   --shadow: 0 16px 40px rgba(32, 36, 32, 0.08);
 }
@@ -21,7 +24,8 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--bg);
+  background:
+    linear-gradient(180deg, #17211e 0, #17211e 240px, var(--bg) 240px);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   letter-spacing: 0;
@@ -33,6 +37,8 @@ textarea {
   font: inherit;
 }
 
+/* Main two-pane research layout. The left panel is for query controls; the
+   right panel is for the answer and auditable evidence. */
 .shell {
   display: grid;
   grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
@@ -51,6 +57,7 @@ textarea {
   box-shadow: var(--shadow);
 }
 
+/* Keep the form visible while reading long answers on desktop. */
 .query-panel {
   align-self: start;
   padding: 22px;
@@ -63,9 +70,17 @@ textarea {
   padding: 24px;
 }
 
+.brand-row h1,
+.answer-header h2 {
+  color: var(--text);
+}
+
+/* Compact header rows used across the query and answer panes. */
 .brand-row,
 .answer-header,
-.sources-header {
+.sources-header,
+.question-row,
+.answer-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -101,7 +116,10 @@ h3 {
 }
 
 .docs-link {
+  border: 1px solid var(--line);
+  border-radius: 999px;
   color: var(--blue);
+  padding: 7px 10px;
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
@@ -119,6 +137,10 @@ h3 {
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
+}
+
+.question-row {
+  margin-bottom: -8px;
 }
 
 textarea,
@@ -160,6 +182,8 @@ input:focus {
   gap: 6px;
 }
 
+/* Source mode is a segmented control built from native radio inputs so it
+   stays keyboard-accessible. */
 .source-picker {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -208,6 +232,24 @@ input:focus {
   cursor: pointer;
 }
 
+.ghost-button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fbfcfa;
+  color: var(--muted);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ghost-button:hover,
+.docs-link:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
 .primary-button:disabled {
   background: #9cad9f;
   cursor: wait;
@@ -240,6 +282,7 @@ input:focus {
   border-bottom: 1px solid var(--line);
   white-space: pre-wrap;
   line-height: 1.62;
+  font-size: 15px;
 }
 
 .sources-header {
@@ -258,18 +301,56 @@ input:focus {
   margin-top: 12px;
 }
 
+/* Evidence cards are collapsed by default. Opening one reveals the exact
+   chunk that was retrieved and passed into the answer generator. */
 .source-item {
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 14px;
   background: #fbfcfa;
+  overflow: hidden;
+}
+
+.source-item[open] {
+  border-color: #b9c8b5;
+  background: #ffffff;
+}
+
+.source-summary {
+  display: grid;
+  grid-template-columns: minmax(160px, auto) minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.source-summary::-webkit-details-marker {
+  display: none;
+}
+
+.source-summary::after {
+  content: "Open";
+  grid-column: 1 / -1;
+  justify-self: end;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.source-item[open] .source-summary::after {
+  content: "Close";
+}
+
+.source-summary-text {
+  min-width: 0;
 }
 
 .source-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 8px;
+  align-content: start;
 }
 
 .tag {
@@ -279,6 +360,16 @@ input:focus {
   padding: 4px 8px;
   font-size: 12px;
   font-weight: 800;
+}
+
+.tag:nth-child(2) {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.tag:nth-child(4) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 
 .source-title {
@@ -294,6 +385,30 @@ input:focus {
   line-height: 1.45;
 }
 
+.source-content {
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  background: #111815;
+  color: #edf4ef;
+  padding: 16px;
+  white-space: pre-wrap;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.source-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
@@ -306,6 +421,10 @@ input:focus {
 
   .answer-panel {
     min-height: auto;
+  }
+
+  .source-summary {
+    grid-template-columns: 1fr;
   }
 }
 

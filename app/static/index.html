@@ -8,6 +8,8 @@
   </head>
   <body>
     <main class="shell">
+      <!-- Query controls stay separate from results so the user can tune a
+           search without losing sight of the answer. -->
       <section class="query-panel" aria-labelledby="app-title">
         <div class="brand-row">
           <div>
@@ -18,11 +20,16 @@
         </div>
 
         <form id="research-form" class="research-form">
-          <label class="field-label" for="question">Question</label>
+          <div class="question-row">
+            <label class="field-label" for="question">Question</label>
+            <button id="sample-button" class="ghost-button" type="button">
+              Sample
+            </button>
+          </div>
           <textarea
             id="question"
             name="question"
-            rows="6"
+            rows="7"
             required
           >What did Walmart management say about margins on the earnings call?</textarea>
 
@@ -88,13 +95,20 @@
         </form>
       </section>
 
+      <!-- The answer pane is intentionally source-first: every generated
+           claim should be traceable back to an expandable citation card. -->
       <section class="answer-panel" aria-live="polite">
         <div class="answer-header">
           <div>
             <p class="eyebrow">Answer</p>
             <h2 id="result-title">Ready</h2>
           </div>
-          <span id="status-pill" class="status-pill">Idle</span>
+          <div class="answer-actions">
+            <button id="copy-button" class="ghost-button" type="button">
+              Copy
+            </button>
+            <span id="status-pill" class="status-pill">Idle</span>
+          </div>
         </div>
 
         <article id="answer" class="answer-text">

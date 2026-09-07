@@ -120,6 +120,9 @@ def should_prefer_latest_transcript(
 
     lower_question = question.lower()
 
+    # Some questions ask for a pattern across calls. In that case the
+    # semantic search should stay historical instead of forcing the newest
+    # fiscal period.
     history_terms = [
         "over time",
         "historical",
@@ -135,6 +138,8 @@ def should_prefer_latest_transcript(
     if any(term in lower_question for term in history_terms):
         return False
 
+    # Singular wording usually means "the latest call I have for this
+    # ticker" unless the caller supplied a fiscal period explicitly.
     latest_terms = [
         "latest",
         "most recent",
@@ -212,6 +217,9 @@ def retrieve_evidence(
         source_type=source_type,
     )
 
+    # This is applied only to transcript searches. SEC filing retrieval
+    # should remain semantic across the filing corpus unless filtered by
+    # form/section/date in a later enhancement.
     prefer_latest_transcript = should_prefer_latest_transcript(
         question=question,
         fiscal_period=fiscal_period,
