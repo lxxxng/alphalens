@@ -67,6 +67,7 @@ Get-Content -Raw db\sql\005_filing_sections.sql | docker exec -i alphalens-postg
 Get-Content -Raw db\sql\006_filing_chunks.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\007_chunk_embeddings.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\008_earnings_transcripts.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
+Get-Content -Raw db\sql\009_research_runs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 ```
 
 ## 6. Run all pipelines in order
@@ -140,6 +141,9 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/retrieval/preview
 
 # Chart-ready indexed price history for the frontend
 Invoke-RestMethod "http://127.0.0.1:8000/api/market/prices?ticker=NVDA&period=1Y"
+
+# Saved research history (full answers are saved after POST /api/research)
+Invoke-RestMethod "http://127.0.0.1:8000/api/research/history?limit=20"
 
 # Download, parsing, and embedding status
 docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT download_status, parse_status, COUNT(*) FROM filings GROUP BY download_status, parse_status; SELECT embedding_status, COUNT(*) FROM filing_chunks GROUP BY embedding_status;"

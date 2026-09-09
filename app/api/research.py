@@ -116,6 +116,13 @@ from app.services.openai_health import (
     check_openai_connection,
 )
 
+from app.services.research_history import (
+    delete_research_run,
+    get_research_run,
+    list_research_runs,
+    save_research_run,
+)
+
 
 # ============================================================
 # Router
@@ -473,6 +480,8 @@ class ResearchResponse(BaseModel):
 
     question: str
 
+    run_id: Optional[int] = None
+
     answer: str
 
     market_context: list[MarketSnapshot] = Field(
@@ -480,6 +489,74 @@ class ResearchResponse(BaseModel):
     )
 
     sources: list[ResearchSource]
+
+
+class ResearchRunSummary(BaseModel):
+    """One lightweight entry in the recent research list."""
+
+    run_id: int
+
+    question: str
+
+    tickers: list[str] = Field(default_factory=list)
+
+    source_type: str
+
+    source_count: int
+
+    market_snapshot_count: int
+
+    created_at: str
+
+
+class ResearchHistoryResponse(BaseModel):
+    """Recent saved AlphaLens research runs."""
+
+    runs: list[ResearchRunSummary]
+
+
+class ResearchRunDetail(BaseModel):
+    """Complete immutable snapshot of one saved research run."""
+
+    run_id: int
+
+    question: str
+
+    answer: str
+
+    tickers: list[str] = Field(default_factory=list)
+
+    ticker_filter: Optional[str] = None
+
+    source_type: str
+
+    top_k: int
+
+    form_type: Optional[str] = None
+
+    section_key: Optional[str] = None
+
+    fiscal_period: Optional[str] = None
+
+    source_count: int
+
+    market_snapshot_count: int
+
+    market_context: list[MarketSnapshot] = Field(
+        default_factory=list
+    )
+
+    sources: list[ResearchSource]
+
+    created_at: str
+
+
+class DeleteResearchRunResponse(BaseModel):
+    """Confirmation returned after deleting a saved run."""
+
+    run_id: int
+
+    deleted: bool
 
 
 class EvidencePreviewResponse(BaseModel):
@@ -671,6 +748,22 @@ def research(
         )
 
 
+        # History is deliberately best-effort. A temporary database problem
+        # should not discard an answer that has already been generated.
+        try:
+            result["run_id"] = save_research_run(
+                request_data=request.model_dump(),
+                result=result,
+            )
+        except Exception as history_error:
+            result["run_id"] = None
+            print(
+                f"[HISTORY WARNING] "
+                f"Could not save research run: "
+                f"{history_error}"
+            )
+
+
         # FastAPI automatically converts this dictionary into
         # the ResearchResponse JSON schema.
         return result
@@ -733,6 +826,116 @@ def research(
                 "research request."
             ),
         ) from error
+
+
+# ============================================================
+# GET /api/research/history
+# ============================================================
+
+@router.get(
+    "/research/history",
+    response_model=ResearchHistoryResponse,
+    summary="List recent saved research runs",
+)
+def research_history(
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+    ),
+):
+    """Return recent run summaries without their large evidence payloads."""
+
+    try:
+        return {
+            "runs": list_research_runs(
+                limit=limit
+            )
+        }
+    except Exception as error:
+        print(
+            f"[API ERROR] "
+            f"/api/research/history: "
+            f"{error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not load research history.",
+        ) from error
+
+
+@router.get(
+    "/research/history/{run_id}",
+    response_model=ResearchRunDetail,
+    summary="Open a saved research run",
+)
+def research_history_detail(
+    run_id: int,
+):
+    """Return one saved answer and its original evidence snapshot."""
+
+    try:
+        result = get_research_run(
+            run_id=run_id
+        )
+    except Exception as error:
+        print(
+            f"[API ERROR] "
+            f"/api/research/history/{run_id}: "
+            f"{error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not load the saved research run.",
+        ) from error
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Research run {run_id} was not found.",
+        )
+
+    return result
+
+
+@router.delete(
+    "/research/history/{run_id}",
+    response_model=DeleteResearchRunResponse,
+    summary="Delete a saved research run",
+)
+def research_history_delete(
+    run_id: int,
+):
+    """Delete one local history entry."""
+
+    try:
+        deleted = delete_research_run(
+            run_id=run_id
+        )
+    except Exception as error:
+        print(
+            f"[API ERROR] "
+            f"DELETE /api/research/history/{run_id}: "
+            f"{error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not delete the saved research run.",
+        ) from error
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Research run {run_id} was not found.",
+        )
+
+    return {
+        "run_id": run_id,
+        "deleted": True,
+    }
 
 
 # ============================================================

@@ -26,6 +26,9 @@ const chartPeriodReturn = document.querySelector("#chart-period-return");
 const chartDateRange = document.querySelector("#chart-date-range");
 const chartLegend = document.querySelector("#chart-legend");
 const chartPeriodButtons = document.querySelectorAll("[data-period]");
+const answerPanel = document.querySelector(".answer-panel");
+const historyList = document.querySelector("#history-list");
+const historyRefreshButton = document.querySelector("#history-refresh");
 
 // A few grounded examples make the UI useful immediately after startup.
 // They also double as quick manual smoke tests for each retrieval mode.
@@ -105,6 +108,181 @@ async function checkOpenAIHealth() {
     });
   } finally {
     openAIHealthButton.disabled = false;
+  }
+}
+
+function formatHistoryDate(value) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function historyMetaItem(text, className = "") {
+  const item = document.createElement("span");
+  item.className = className;
+  item.textContent = text;
+  return item;
+}
+
+async function deleteSavedRun(runId) {
+  const confirmed = window.confirm(
+    "Delete this saved research run?"
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `/api/research/history/${runId}`,
+      { method: "DELETE" }
+    );
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not delete saved research.");
+    }
+
+    await loadResearchHistory();
+    setStatus("Deleted");
+  } catch (error) {
+    setStatus("Delete failed", "error");
+  }
+}
+
+function renderResearchHistory(items) {
+  historyList.replaceChildren();
+
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "history-empty";
+    empty.textContent = "No saved research yet.";
+    historyList.appendChild(empty);
+    return;
+  }
+
+  for (const item of items) {
+    const row = document.createElement("div");
+    row.className = "history-item";
+
+    const openButton = document.createElement("button");
+    openButton.type = "button";
+    openButton.className = "history-open";
+    openButton.title = `Open saved run ${item.run_id}`;
+
+    const meta = document.createElement("div");
+    meta.className = "history-meta";
+    meta.append(
+      historyMetaItem(
+        item.tickers?.join(", ") || "Research",
+        "history-ticker"
+      ),
+      historyMetaItem(item.source_type),
+      historyMetaItem(formatHistoryDate(item.created_at))
+    );
+
+    const question = document.createElement("span");
+    question.className = "history-question";
+    question.textContent = item.question;
+    openButton.append(meta, question);
+    openButton.addEventListener("click", () => {
+      openSavedResearchRun(item.run_id);
+    });
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "history-delete";
+    deleteButton.textContent = "Delete";
+    deleteButton.title = `Delete saved run ${item.run_id}`;
+    deleteButton.addEventListener("click", () => {
+      deleteSavedRun(item.run_id);
+    });
+
+    row.append(openButton, deleteButton);
+    historyList.appendChild(row);
+  }
+}
+
+async function loadResearchHistory() {
+  historyRefreshButton.disabled = true;
+
+  try {
+    const response = await fetch("/api/research/history?limit=20");
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not load research history.");
+    }
+
+    renderResearchHistory(data.runs || []);
+  } catch (error) {
+    historyList.replaceChildren();
+    const message = document.createElement("p");
+    message.className = "history-empty";
+    message.textContent = "Research history is unavailable.";
+    historyList.appendChild(message);
+  } finally {
+    historyRefreshButton.disabled = false;
+  }
+}
+
+async function restoreSavedFilters(run) {
+  form.elements.question.value = run.question;
+  form.elements.top_k.value = run.top_k;
+  setSourceType(run.source_type);
+
+  const ticker = run.ticker_filter || run.tickers?.[0] || "";
+  setSelectValue(tickerSelect, ticker);
+
+  if (metadataReady) {
+    await loadFiltersForTicker(ticker);
+  }
+
+  setSelectValue(fiscalPeriodSelect, run.fiscal_period);
+  setSelectValue(formTypeSelect, run.form_type);
+
+  if (metadataReady) {
+    await loadFilingSections(
+      ticker,
+      run.form_type || ""
+    );
+  }
+
+  setSelectValue(sectionKeySelect, run.section_key);
+  updateFilterState();
+  await loadMarketChart();
+}
+
+async function openSavedResearchRun(runId) {
+  setStatus("Loading", "loading");
+
+  try {
+    const response = await fetch(`/api/research/history/${runId}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not open saved research.");
+    }
+
+    await restoreSavedFilters(data);
+    resultTitle.textContent = `Saved Run #${data.run_id}`;
+    answer.textContent = data.answer;
+    renderMarketContext(data.market_context || []);
+    renderSources(data.sources || []);
+    setStatus("History");
+
+    if (window.innerWidth <= 900) {
+      answerPanel.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  } catch (error) {
+    setStatus("History error", "error");
   }
 }
 
@@ -926,8 +1104,10 @@ copyButton.addEventListener("click", async () => {
 // hiding the other.
 initializeMetadata();
 checkOpenAIHealth();
+loadResearchHistory();
 
 openAIHealthButton.addEventListener("click", checkOpenAIHealth);
+historyRefreshButton.addEventListener("click", loadResearchHistory);
 
 async function runResearchRequest(mode) {
   const payload = payloadFromForm(
@@ -979,6 +1159,10 @@ async function runResearchRequest(mode) {
     renderMarketContext(data.market_context || []);
     renderSources(data.sources || []);
     setStatus("Done");
+
+    if (!isPreview && data.run_id) {
+      loadResearchHistory();
+    }
   } catch (error) {
     resultTitle.textContent = "Error";
     answer.textContent = error.message;

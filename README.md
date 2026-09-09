@@ -66,6 +66,7 @@ Get-Content db\sql\005_filing_sections.sql | docker exec -i alphalens-postgres p
 Get-Content db\sql\006_filing_chunks.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\007_chunk_embeddings.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\008_earnings_transcripts.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\009_research_runs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -544,6 +545,22 @@ ticker and SPY. Both series are indexed to 100 at the start of the selected
 ```text
 GET /api/market/prices?ticker=NVDA&period=1Y
 ```
+
+### Saved Research History
+
+Successful `POST /api/research` answers are saved automatically with their
+filters, market snapshots, and exact source records. Retrieval previews are
+not saved. Opening history returns the stored snapshot and does not rerun
+retrieval or call OpenAI.
+
+```text
+GET /api/research/history?limit=20
+GET /api/research/history/1
+DELETE /api/research/history/1
+```
+
+The research console lists recent runs below the query controls. A saved run
+can be reopened with its original question and filters, or deleted locally.
 
 ## 11. Stop PostgreSQL
 

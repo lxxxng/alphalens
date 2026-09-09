@@ -129,6 +129,21 @@
             </button>
           </div>
         </form>
+
+        <section class="history-panel" aria-labelledby="history-title">
+          <div class="history-header">
+            <div>
+              <p class="eyebrow">Saved</p>
+              <h2 id="history-title">Recent Research</h2>
+            </div>
+            <button id="history-refresh" class="ghost-button" type="button">
+              Refresh
+            </button>
+          </div>
+          <div id="history-list" class="history-list" aria-live="polite">
+            <p class="history-empty">Loading history...</p>
+          </div>
+        </section>
       </section>
 
       <!-- The answer pane is intentionally source-first: every generated
