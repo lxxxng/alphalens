@@ -537,6 +537,14 @@ For pure market-performance questions in `auto` mode, AlphaLens answers from
 the structured market snapshot without pulling unrelated filing/transcript
 chunks into the prompt.
 
+The research console also loads adjusted-close history for the selected
+ticker and SPY. Both series are indexed to 100 at the start of the selected
+1M, 3M, 1Y, or 5Y period so their performance can be compared directly.
+
+```text
+GET /api/market/prices?ticker=NVDA&period=1Y
+```
+
 ## 11. Stop PostgreSQL
 
 Stop PostgreSQL without deleting its data volume:

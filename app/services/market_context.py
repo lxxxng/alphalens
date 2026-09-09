@@ -25,6 +25,15 @@ RETURN_WINDOWS = {
     "5Y": 365 * 5,
 }
 
+MARKET_CHART_WINDOWS = {
+    "1M": 30,
+    "3M": 90,
+    "1Y": 365,
+    "5Y": 365 * 5,
+}
+
+MAX_MARKET_CHART_POINTS = 420
+
 MARKET_QUESTION_TERMS = [
     "stock",
     "share price",
@@ -132,6 +141,163 @@ def price_value(
         return None
 
     return float(value)
+
+
+def filter_rows_for_period(
+    rows: list[dict],
+    start_date,
+    end_date,
+) -> list[dict]:
+    """Keep valid price rows inside an inclusive chart window."""
+
+    return [
+        row
+        for row in rows
+        if (
+            start_date <= row["trading_date"] <= end_date
+            and price_value(row) is not None
+        )
+    ]
+
+
+def downsample_rows(
+    rows: list[dict],
+    max_points: int = MAX_MARKET_CHART_POINTS,
+) -> list[dict]:
+    """
+    Reduce long histories while preserving the first and last observations.
+
+    Five years of daily data can exceed 1,200 records. A few hundred evenly
+    spaced observations render the same trend with a smaller API response.
+    """
+
+    if len(rows) <= max_points:
+        return rows
+
+    indexes = {
+        round(
+            position
+            * (len(rows) - 1)
+            / (max_points - 1)
+        )
+        for position in range(max_points)
+    }
+
+    return [
+        rows[index]
+        for index in sorted(indexes)
+    ]
+
+
+def build_market_price_series(
+    ticker: str,
+    rows: list[dict],
+) -> dict | None:
+    """Convert price rows into raw and start-at-100 chart points."""
+
+    if not rows:
+        return None
+
+    sampled_rows = downsample_rows(rows)
+    starting_price = price_value(rows[0])
+
+    if not starting_price:
+        return None
+
+    points = []
+
+    for row in sampled_rows:
+        close = price_value(row)
+
+        if close is None:
+            continue
+
+        points.append(
+            {
+                "date": str(row["trading_date"]),
+                "close": close,
+                "indexed_value": close / starting_price * 100,
+            }
+        )
+
+    return {
+        "ticker": ticker.upper(),
+        "points": points,
+    }
+
+
+def get_market_history(
+    ticker: str,
+    period: str = "1Y",
+) -> dict | None:
+    """
+    Return chart-ready company and SPY histories for one trailing period.
+
+    Both lines are independently indexed to 100 at their first observation,
+    which makes their percentage performance comparable on one y-axis.
+    """
+
+    normalized_ticker = ticker.upper()
+    normalized_period = period.upper()
+
+    if normalized_period not in MARKET_CHART_WINDOWS:
+        raise ValueError(
+            f"Unsupported market chart period: {period}"
+        )
+
+    engine = get_database_engine()
+    ticker_rows = fetch_price_rows(
+        engine=engine,
+        ticker=normalized_ticker,
+    )
+
+    if not ticker_rows:
+        return None
+
+    end_date = ticker_rows[-1]["trading_date"]
+    start_date = end_date - timedelta(
+        days=MARKET_CHART_WINDOWS[normalized_period]
+    )
+    requested_tickers = [normalized_ticker]
+
+    if normalized_ticker != BENCHMARK_TICKER:
+        requested_tickers.append(BENCHMARK_TICKER)
+
+    series = []
+
+    for requested_ticker in requested_tickers:
+        rows = (
+            ticker_rows
+            if requested_ticker == normalized_ticker
+            else fetch_price_rows(
+                engine=engine,
+                ticker=requested_ticker,
+            )
+        )
+        window_rows = filter_rows_for_period(
+            rows=rows,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        price_series = build_market_price_series(
+            ticker=requested_ticker,
+            rows=window_rows,
+        )
+
+        if price_series is not None:
+            series.append(price_series)
+
+    if not series:
+        return None
+
+    return {
+        "ticker": normalized_ticker,
+        "benchmark_ticker": BENCHMARK_TICKER,
+        "period": normalized_period,
+        "start_date": series[0]["points"][0]["date"],
+        "end_date": series[0]["points"][-1]["date"],
+        "series": series,
+    }
 
 
 def find_row_on_or_before(

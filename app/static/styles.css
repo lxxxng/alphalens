@@ -382,6 +382,180 @@ select:focus {
   font-size: 15px;
 }
 
+.price-chart-panel {
+  margin-top: 22px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.chart-header,
+.chart-summary,
+.chart-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.range-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 42px);
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.range-picker button {
+  height: 30px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.range-picker button.active {
+  background: var(--surface);
+  color: var(--accent-strong);
+  box-shadow: 0 1px 3px rgba(32, 36, 32, 0.12);
+}
+
+.chart-summary {
+  justify-content: flex-start;
+  margin-top: 15px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.chart-summary strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+.chart-summary .positive {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.chart-summary .negative {
+  color: var(--danger);
+  font-weight: 800;
+}
+
+.price-chart {
+  position: relative;
+  width: 100%;
+  height: 300px;
+  margin-top: 8px;
+}
+
+.price-chart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.chart-grid-line {
+  stroke: #e2e7df;
+  stroke-width: 1;
+}
+
+.chart-axis-label {
+  fill: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.chart-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-hover-line {
+  stroke: #7a8779;
+  stroke-dasharray: 4 4;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.chart-interaction {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+.chart-tooltip {
+  position: absolute;
+  z-index: 2;
+  width: 175px;
+  border: 1px solid #34433d;
+  border-radius: 6px;
+  background: var(--surface-strong);
+  color: white;
+  padding: 9px 10px;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(23, 33, 30, 0.2);
+  font-size: 12px;
+}
+
+.chart-tooltip strong,
+.chart-tooltip span {
+  display: block;
+}
+
+.chart-tooltip span {
+  margin-top: 5px;
+}
+
+.chart-tooltip i,
+.chart-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+}
+
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  margin: 0;
+  place-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.chart-empty[hidden],
+.chart-tooltip[hidden] {
+  display: none;
+}
+
+.chart-legend {
+  justify-content: flex-start;
+  min-height: 22px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.chart-index-note {
+  margin-left: auto;
+}
+
 .sources-header {
   margin-top: 22px;
 }
@@ -574,8 +748,13 @@ select:focus {
 
 @media (max-width: 900px) {
   .shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     padding: 14px;
+  }
+
+  .query-panel,
+  .answer-panel {
+    min-width: 0;
   }
 
   .query-panel {
@@ -594,11 +773,38 @@ select:focus {
 @media (max-width: 560px) {
   .brand-row {
     align-items: flex-start;
+    flex-direction: column;
   }
 
   .brand-actions {
-    align-items: stretch;
+    width: 100%;
+    align-items: center;
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+
+  .answer-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .chart-header {
+    align-items: flex-start;
     flex-direction: column;
+  }
+
+  .chart-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .price-chart {
+    height: 260px;
+  }
+
+  .chart-index-note {
+    margin-left: 0;
   }
 
   .control-grid,

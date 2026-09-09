@@ -108,6 +108,10 @@ from app.services.metadata import (
     get_transcript_periods,
 )
 
+from app.services.market_context import (
+    get_market_history,
+)
+
 from app.services.openai_health import (
     check_openai_connection,
 )
@@ -326,6 +330,40 @@ class MarketSnapshot(BaseModel):
     row_count: int
 
 
+class MarketPricePoint(BaseModel):
+    """One observation in a market chart series."""
+
+    date: str
+
+    close: float
+
+    indexed_value: float
+
+
+class MarketPriceSeries(BaseModel):
+    """Chart points for one ticker."""
+
+    ticker: str
+
+    points: list[MarketPricePoint]
+
+
+class MarketHistoryResponse(BaseModel):
+    """Company and benchmark history returned to the frontend chart."""
+
+    ticker: str
+
+    benchmark_ticker: str
+
+    period: str
+
+    start_date: str
+
+    end_date: str
+
+    series: list[MarketPriceSeries]
+
+
 class TickerMetadata(BaseModel):
     """
     One ticker available in the local AlphaLens database.
@@ -496,6 +534,61 @@ def openai_health():
     """
 
     return check_openai_connection()
+
+
+# ============================================================
+# GET /api/market/prices
+# ============================================================
+
+@router.get(
+    "/market/prices",
+    response_model=MarketHistoryResponse,
+    summary="Load market price history for a chart",
+)
+def market_prices(
+    ticker: str = Query(
+        ...,
+        min_length=1,
+        max_length=20,
+    ),
+    period: str = Query(
+        default="1Y",
+        pattern="^(1M|3M|1Y|5Y)$",
+    ),
+):
+    """
+    Return adjusted-close performance for a ticker and SPY.
+
+    Values are indexed to 100 at the start of the requested period so the
+    company and benchmark can share one meaningful chart scale.
+    """
+
+    normalized_ticker = ticker.upper()
+
+    try:
+        result = get_market_history(
+            ticker=normalized_ticker,
+            period=period,
+        )
+    except Exception as error:
+        print(
+            f"[API ERROR] "
+            f"/api/market/prices: "
+            f"{error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not load market price history.",
+        ) from error
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No market prices found for {normalized_ticker}.",
+        )
+
+    return result
 
 
 # ============================================================

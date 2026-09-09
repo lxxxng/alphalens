@@ -17,6 +17,15 @@ const formTypeSelect = document.querySelector("#form-type");
 const sectionKeySelect = document.querySelector("#section-key");
 const openAIHealthButton = document.querySelector("#openai-health");
 const openAIHealthLabel = document.querySelector("#openai-health-label");
+const priceChart = document.querySelector("#price-chart");
+const priceChartSvg = document.querySelector("#price-chart-svg");
+const chartTooltip = document.querySelector("#chart-tooltip");
+const chartEmpty = document.querySelector("#chart-empty");
+const chartTicker = document.querySelector("#chart-ticker");
+const chartPeriodReturn = document.querySelector("#chart-period-return");
+const chartDateRange = document.querySelector("#chart-date-range");
+const chartLegend = document.querySelector("#chart-legend");
+const chartPeriodButtons = document.querySelectorAll("[data-period]");
 
 // A few grounded examples make the UI useful immediately after startup.
 // They also double as quick manual smoke tests for each retrieval mode.
@@ -46,6 +55,12 @@ const samples = [
 
 let sampleIndex = 0;
 let metadataReady = false;
+let selectedChartPeriod = "1Y";
+let marketChartData = null;
+let marketChartRequest = 0;
+
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+const CHART_COLORS = ["#116b55", "#245c91"];
 
 function setStatus(label, state = "") {
   statusPill.textContent = label;
@@ -338,6 +353,8 @@ async function initializeMetadata() {
     // the page submit normal research requests.
     setStatus("Metadata unavailable", "error");
   }
+
+  await loadMarketChart();
 }
 
 function formatPercent(value) {
@@ -356,6 +373,294 @@ function formatNumber(value, maximumFractionDigits = 2) {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits,
   }).format(value);
+}
+
+function svgElement(name, attributes = {}) {
+  const element = document.createElementNS(SVG_NAMESPACE, name);
+
+  for (const [key, value] of Object.entries(attributes)) {
+    element.setAttribute(key, value);
+  }
+
+  return element;
+}
+
+function chartLinePath(points, xScale, yScale) {
+  return points.map((point, index) => {
+    const command = index === 0 ? "M" : "L";
+    const x = xScale(point.date).toFixed(2);
+    const y = yScale(point.indexed_value).toFixed(2);
+    return `${command}${x},${y}`;
+  }).join(" ");
+}
+
+function formatChartDate(value) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T00:00:00Z`));
+}
+
+function setChartLoading(message) {
+  priceChartSvg.replaceChildren();
+  chartLegend.replaceChildren();
+  chartTooltip.hidden = true;
+  chartEmpty.hidden = false;
+  chartEmpty.textContent = message;
+}
+
+function renderChartLegend(series) {
+  chartLegend.replaceChildren();
+
+  series.forEach((item, index) => {
+    const legendItem = document.createElement("span");
+    const swatch = document.createElement("i");
+    swatch.style.backgroundColor = CHART_COLORS[index];
+
+    const label = document.createElement("strong");
+    label.textContent = item.ticker;
+
+    legendItem.append(swatch, label);
+    chartLegend.appendChild(legendItem);
+  });
+
+  const note = document.createElement("span");
+  note.className = "chart-index-note";
+  note.textContent = "Indexed to 100 at start";
+  chartLegend.appendChild(note);
+}
+
+function closestChartPoint(points, targetTime) {
+  return points.reduce((best, point) => {
+    const pointTime = Date.parse(`${point.date}T00:00:00Z`);
+    const distance = Math.abs(pointTime - targetTime);
+    return distance < best.distance ? { point, distance } : best;
+  }, { point: points[0], distance: Infinity }).point;
+}
+
+function renderChartTooltip(date, rows, left, top) {
+  const dateLabel = document.createElement("strong");
+  dateLabel.textContent = formatChartDate(date);
+  chartTooltip.replaceChildren(dateLabel);
+
+  rows.forEach((row, index) => {
+    const item = document.createElement("span");
+    const swatch = document.createElement("i");
+    swatch.style.backgroundColor = CHART_COLORS[index];
+    item.append(
+      swatch,
+      `${row.ticker} ${row.point.indexed_value.toFixed(1)} (${formatNumber(row.point.close)})`
+    );
+    chartTooltip.appendChild(item);
+  });
+
+  chartTooltip.hidden = false;
+  chartTooltip.style.left = `${left}px`;
+  chartTooltip.style.top = `${top}px`;
+}
+
+function renderMarketChart() {
+  if (!marketChartData?.series?.length) {
+    setChartLoading("No market history available.");
+    return;
+  }
+
+  const width = Math.max(priceChart.clientWidth, 320);
+  const height = Math.max(priceChart.clientHeight, 240);
+  const margin = { top: 18, right: 18, bottom: 34, left: 48 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const allPoints = marketChartData.series.flatMap((item) => item.points);
+  const timestamps = allPoints.map(
+    (point) => Date.parse(`${point.date}T00:00:00Z`)
+  );
+  const values = allPoints.map((point) => point.indexed_value);
+  const minTime = Math.min(...timestamps);
+  const maxTime = Math.max(...timestamps);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const valuePadding = Math.max((rawMax - rawMin) * 0.1, 2);
+  const minValue = rawMin - valuePadding;
+  const maxValue = rawMax + valuePadding;
+
+  const xScale = (date) => {
+    const time = Date.parse(`${date}T00:00:00Z`);
+    const ratio = maxTime === minTime
+      ? 0
+      : (time - minTime) / (maxTime - minTime);
+    return margin.left + ratio * plotWidth;
+  };
+  const yScale = (value) => (
+    margin.top
+    + (maxValue - value) / (maxValue - minValue) * plotHeight
+  );
+
+  priceChartSvg.replaceChildren();
+  priceChartSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  chartEmpty.hidden = true;
+
+  // Exact grid labels keep the compact chart readable without adding a
+  // heavyweight charting dependency to the frontend.
+  for (let index = 0; index < 5; index += 1) {
+    const ratio = index / 4;
+    const value = maxValue - ratio * (maxValue - minValue);
+    const y = margin.top + ratio * plotHeight;
+
+    priceChartSvg.appendChild(svgElement("line", {
+      x1: margin.left,
+      x2: width - margin.right,
+      y1: y,
+      y2: y,
+      class: "chart-grid-line",
+    }));
+
+    const label = svgElement("text", {
+      x: margin.left - 9,
+      y: y + 4,
+      class: "chart-axis-label",
+      "text-anchor": "end",
+    });
+    label.textContent = value.toFixed(0);
+    priceChartSvg.appendChild(label);
+  }
+
+  [marketChartData.start_date, marketChartData.end_date].forEach(
+    (date, index) => {
+      const label = svgElement("text", {
+        x: index === 0 ? margin.left : width - margin.right,
+        y: height - 9,
+        class: "chart-axis-label",
+        "text-anchor": index === 0 ? "start" : "end",
+      });
+      label.textContent = formatChartDate(date);
+      priceChartSvg.appendChild(label);
+    }
+  );
+
+  marketChartData.series.forEach((item, index) => {
+    priceChartSvg.appendChild(svgElement("path", {
+      d: chartLinePath(item.points, xScale, yScale),
+      class: "chart-line",
+      stroke: CHART_COLORS[index],
+    }));
+  });
+
+  const hoverLine = svgElement("line", {
+    class: "chart-hover-line",
+    y1: margin.top,
+    y2: height - margin.bottom,
+  });
+  hoverLine.style.visibility = "hidden";
+  priceChartSvg.appendChild(hoverLine);
+
+  const interaction = svgElement("rect", {
+    x: margin.left,
+    y: margin.top,
+    width: plotWidth,
+    height: plotHeight,
+    class: "chart-interaction",
+  });
+
+  interaction.addEventListener("pointermove", (event) => {
+    const bounds = priceChartSvg.getBoundingClientRect();
+    const svgX = (event.clientX - bounds.left) * width / bounds.width;
+    const ratio = Math.min(
+      1,
+      Math.max(0, (svgX - margin.left) / plotWidth)
+    );
+    const targetTime = minTime + ratio * (maxTime - minTime);
+    const primaryPoint = closestChartPoint(
+      marketChartData.series[0].points,
+      targetTime
+    );
+    const primaryTime = Date.parse(`${primaryPoint.date}T00:00:00Z`);
+    const lineX = xScale(primaryPoint.date);
+    const tooltipRows = marketChartData.series.map((item) => ({
+      ticker: item.ticker,
+      point: closestChartPoint(item.points, primaryTime),
+    }));
+
+    hoverLine.setAttribute("x1", lineX);
+    hoverLine.setAttribute("x2", lineX);
+    hoverLine.style.visibility = "visible";
+
+    renderChartTooltip(
+      primaryPoint.date,
+      tooltipRows,
+      Math.max(8, Math.min(event.clientX - bounds.left + 12, bounds.width - 183)),
+      Math.max(event.clientY - bounds.top - 70, 8)
+    );
+  });
+
+  interaction.addEventListener("pointerleave", () => {
+    hoverLine.style.visibility = "hidden";
+    chartTooltip.hidden = true;
+  });
+
+  priceChartSvg.appendChild(interaction);
+  renderChartLegend(marketChartData.series);
+}
+
+function updateChartSummary(data) {
+  const primarySeries = data.series[0];
+  const first = primarySeries.points[0];
+  const last = primarySeries.points[primarySeries.points.length - 1];
+  const periodReturn = last.indexed_value / first.indexed_value - 1;
+
+  chartTicker.textContent = data.ticker;
+  chartPeriodReturn.textContent = `${formatPercent(periodReturn)} over ${data.period}`;
+  chartPeriodReturn.className = periodReturn >= 0 ? "positive" : "negative";
+  chartDateRange.textContent = `${formatChartDate(data.start_date)} - ${formatChartDate(data.end_date)}`;
+}
+
+async function loadMarketChart() {
+  const ticker = tickerSelect.value;
+  const requestId = ++marketChartRequest;
+
+  if (!ticker) {
+    marketChartData = null;
+    setChartLoading("Select a ticker to load market data.");
+    return;
+  }
+
+  chartTicker.textContent = ticker;
+  chartPeriodReturn.className = "";
+  chartPeriodReturn.textContent = "Loading prices...";
+  chartDateRange.textContent = "";
+  setChartLoading("Loading market data...");
+
+  try {
+    const params = new URLSearchParams({
+      ticker,
+      period: selectedChartPeriod,
+    });
+    const response = await fetch(`/api/market/prices?${params}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Market history request failed.");
+    }
+
+    // Ignore a slower response when the user changes ticker or period while
+    // the previous request is still in flight.
+    if (requestId !== marketChartRequest) {
+      return;
+    }
+
+    marketChartData = data;
+    updateChartSummary(data);
+    renderMarketChart();
+  } catch (error) {
+    if (requestId !== marketChartRequest) {
+      return;
+    }
+
+    marketChartData = null;
+    chartPeriodReturn.textContent = "Unavailable";
+    setChartLoading(error.message);
+  }
 }
 
 function metric(label, value) {
@@ -555,13 +860,40 @@ sampleButton.addEventListener("click", async () => {
 
   form.elements.section_key.value = sample.section_key || "";
   updateFilterState();
+  await loadMarketChart();
 });
 
 tickerSelect.addEventListener("change", async () => {
   await loadFiltersForTicker(
     tickerSelect.value
   );
+  await loadMarketChart();
 });
+
+for (const button of chartPeriodButtons) {
+  button.addEventListener("click", async () => {
+    selectedChartPeriod = button.dataset.period;
+
+    for (const periodButton of chartPeriodButtons) {
+      const isActive = periodButton === button;
+      periodButton.classList.toggle(
+        "active",
+        isActive
+      );
+      periodButton.setAttribute("aria-pressed", String(isActive));
+    }
+
+    await loadMarketChart();
+  });
+}
+
+if ("ResizeObserver" in window) {
+  new ResizeObserver(() => {
+    if (marketChartData) {
+      renderMarketChart();
+    }
+  }).observe(priceChart);
+}
 
 formTypeSelect.addEventListener("change", async () => {
   await loadFilingSections(
