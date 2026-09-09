@@ -16,7 +16,14 @@ from sqlalchemy import create_engine
 load_dotenv()
 
 
-FAISS_DIRECTORY = Path("data/faiss")
+# Self-hosted CI can keep large, private index files outside the Actions
+# checkout. Local development continues to use data/faiss by default.
+FAISS_DIRECTORY = Path(
+    os.getenv(
+        "ALPHALENS_FAISS_DIRECTORY",
+        "data/faiss",
+    )
+)
 
 SEC_INDEX_PATH = FAISS_DIRECTORY / "sec_chunks.faiss"
 SEC_METADATA_PATH = FAISS_DIRECTORY / "sec_chunks.meta.json"

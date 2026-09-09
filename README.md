@@ -619,6 +619,42 @@ case. `EVAL_JUDGE_MODEL` can select a judge independently from `RAG_MODEL`.
 Keep the deterministic checks as the hard guardrails and periodically review
 model-judge failures with a human before changing rubrics or thresholds.
 
+### Continuous-Integration Quality Gate
+
+`.github/workflows/ci.yml` runs unit tests on a GitHub-hosted runner for every
+push and pull request. The corpus-backed retrieval and response suites run on
+a Windows self-hosted runner because the PostgreSQL corpus and FAISS indexes
+are intentionally not committed to Git.
+
+Configure the repository before enabling the required check:
+
+1. In GitHub, open **Settings > Actions > Runners**, add a Windows self-hosted
+   runner, ensure its runner version is at least `2.327.1`, and assign it the
+   custom label `alphalens-evals`.
+2. Add Actions secrets `DATABASE_URL` and `OPENAI_API_KEY`.
+3. Add the Actions variable `ALPHALENS_FAISS_DIRECTORY` containing the absolute
+   path to this machine's populated `data\faiss` directory.
+4. Optionally add `RAG_MODEL` and `EVAL_JUDGE_MODEL` repository variables.
+5. Create a protected Actions environment named `corpus-evals` and require an
+   authorized reviewer before its jobs can start on the self-hosted machine.
+6. In **Settings > Branches**, require `Unit tests` and `Corpus quality gate`
+   before merging.
+
+The self-hosted runner account must be able to reach PostgreSQL through the
+configured `DATABASE_URL` and read the FAISS directory. Keep the runner private
+to this repository and approve the protected environment only for trusted
+changes because pull-request code executes on that machine.
+
+Run the same gate locally:
+
+```powershell
+.\scripts\run_quality_gate.ps1
+```
+
+Preflight validates secrets, database row counts, index files, metadata, and
+embedding dimensions before any OpenAI request is made. GitHub uploads both
+JSON evaluation reports for 30 days even when the quality threshold fails.
+
 ## 11. Stop PostgreSQL
 
 Stop PostgreSQL without deleting its data volume:
