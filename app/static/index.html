@@ -4,31 +4,46 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>AlphaLens Research</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <!-- Version static assets so a long-running local browser cannot combine
+         new markup with a stale stylesheet or script. -->
+    <link rel="stylesheet" href="/static/styles.css?v=20260909.2">
   </head>
   <body>
+    <header class="app-header">
+      <div class="app-header-inner">
+        <a class="product-lockup" href="/" aria-label="AlphaLens research home">
+          <span class="product-mark" aria-hidden="true">A</span>
+          <span>
+            <strong id="app-title">AlphaLens</strong>
+            <small>Research Intelligence</small>
+          </span>
+        </a>
+        <nav class="global-nav" aria-label="Application navigation">
+          <a class="nav-link active" href="/">Research</a>
+          <a class="nav-link" href="/evals">Evaluations</a>
+          <a class="nav-link" href="/docs">API</a>
+          <button
+            id="openai-health"
+            class="connection-status checking"
+            type="button"
+            title="Check OpenAI connection"
+            aria-live="polite"
+          >
+            <span class="connection-dot" aria-hidden="true"></span>
+            <span id="openai-health-label">OpenAI: Checking</span>
+          </button>
+        </nav>
+      </div>
+    </header>
+
     <main class="shell">
       <!-- Query controls stay separate from results so the user can tune a
            search without losing sight of the answer. -->
-      <section class="query-panel" aria-labelledby="app-title">
+      <aside class="query-panel" aria-labelledby="query-title">
         <div class="brand-row">
           <div>
-            <p class="eyebrow">AlphaLens</p>
-            <h1 id="app-title">Research Console</h1>
-          </div>
-          <div class="brand-actions">
-            <button
-              id="openai-health"
-              class="connection-status checking"
-              type="button"
-              title="Check OpenAI connection"
-              aria-live="polite"
-            >
-              <span class="connection-dot" aria-hidden="true"></span>
-              <span id="openai-health-label">OpenAI: Checking</span>
-            </button>
-            <a class="docs-link" href="/evals">Evaluations</a>
-            <a class="docs-link" href="/docs">API Docs</a>
+            <p class="eyebrow">Query Builder</p>
+            <h2 id="query-title">Research Brief</h2>
           </div>
         </div>
 
@@ -42,7 +57,7 @@
           <textarea
             id="question"
             name="question"
-            rows="7"
+            rows="5"
             required
           >What did Walmart management say about margins on the earnings call?</textarea>
 
@@ -145,14 +160,14 @@
             <p class="history-empty">Loading history...</p>
           </div>
         </section>
-      </section>
+      </aside>
 
       <!-- The answer pane is intentionally source-first: every generated
            claim should be traceable back to an expandable citation card. -->
       <section class="answer-panel" aria-live="polite">
         <div class="answer-header">
           <div>
-            <p class="eyebrow">Answer</p>
+            <p class="eyebrow">Investment Brief</p>
             <h2 id="result-title">Ready</h2>
           </div>
           <div class="answer-actions">
@@ -211,6 +226,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=20260909.2"></script>
   </body>
 </html>
