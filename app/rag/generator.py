@@ -81,6 +81,7 @@ a normal chatbot.
 """
 
 import os
+import re
 
 from dotenv import load_dotenv
 
@@ -671,6 +672,15 @@ def build_generation_prompt(
         else "No structured market data supplied."
     )
 
+    citation_requirement = (
+        "Cite document claims using only the [S#] labels present above."
+        if context
+        else (
+            "No document sources or [S#] labels are available. Do not create "
+            "or use bracketed source citations for structured market data."
+        )
+    )
+
     return f"""
 USER QUESTION
 =============
@@ -695,14 +705,60 @@ ANSWER REQUIREMENTS
 
 Answer the user's question using only the evidence above.
 
-Cite relevant claims using source labels such as:
+{citation_requirement}
 
-    [S1]
-    [S2]
+When earnings-call evidence is present, state its fiscal period. When SEC
+filing evidence is present, state the relevant form type and filing date.
 
 If the evidence does not support a complete answer, explicitly
 state what cannot be determined from the retrieved evidence.
 """.strip()
+
+
+SOURCE_CITATION_PATTERN = re.compile(r"[ \t]*\[S\d+\]")
+
+
+def finalize_grounded_answer(
+    answer: str,
+    retrieved_results: list[dict],
+) -> str:
+    """Enforce source-label and single-call period invariants.
+
+    Prompt instructions improve behavior, but these two rules are metadata
+    facts the application can guarantee without asking the model to remember
+    them on every generation.
+    """
+
+    answer = answer.strip()
+
+    if not retrieved_results:
+        # Structured market snapshots do not have document citation labels.
+        # Remove any invented [S#] marker before it reaches the API or history.
+        answer = SOURCE_CITATION_PATTERN.sub("", answer)
+
+    transcript_scopes = {
+        (
+            result.get("ticker"),
+            result.get("fiscal_period"),
+        )
+        for result in retrieved_results
+        if (
+            result.get("source_type") == "transcript"
+            and result.get("ticker")
+            and result.get("fiscal_period")
+        )
+    }
+
+    if len(transcript_scopes) == 1:
+        ticker, fiscal_period = next(iter(transcript_scopes))
+
+        if fiscal_period.upper() not in answer.upper():
+            answer = (
+                f"Evidence period: {ticker} {fiscal_period} earnings call.\n\n"
+                f"{answer}"
+            )
+
+    return answer.strip()
 
 
 # ============================================================
@@ -983,9 +1039,12 @@ def generate_grounded_answer(
         )
 
 
-    # response.output_text provides the combined generated
-    # text from the Responses API.
-    return response.output_text.strip()
+    # response.output_text provides the combined generated text. Finalization
+    # applies invariants derived from metadata rather than model judgment.
+    return finalize_grounded_answer(
+        answer=response.output_text,
+        retrieved_results=retrieved_results,
+    )
 
 # ============================================================
 # answer_question()
