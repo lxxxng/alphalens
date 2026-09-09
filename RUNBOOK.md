@@ -145,6 +145,9 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/market/prices?ticker=NVDA&period=1Y
 # Saved research history (full answers are saved after POST /api/research)
 Invoke-RestMethod "http://127.0.0.1:8000/api/research/history?limit=20"
 
+# Retrieval regression suite (embeddings only; no generated answers)
+python -m evals.run_retrieval
+
 # Download, parsing, and embedding status
 docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT download_status, parse_status, COUNT(*) FROM filings GROUP BY download_status, parse_status; SELECT embedding_status, COUNT(*) FROM filing_chunks GROUP BY embedding_status;"
 

@@ -562,6 +562,31 @@ DELETE /api/research/history/1
 The research console lists recent runs below the query controls. A saved run
 can be reopened with its original question and filters, or deleted locally.
 
+### Retrieval Evaluations
+
+Run the versioned retrieval suite without generating answers:
+
+```powershell
+python -m evals.run_retrieval
+```
+
+The suite checks ticker detection, source routing, source counts and types,
+fiscal-period and filing filters, market context, and required evidence
+terms. Text retrieval cases create one query embedding per searched corpus,
+but the answer-generation model is never called. Results are written to
+`data/evals/retrieval_report.json`; the command exits with code 1 if any case
+fails, making it suitable for CI.
+
+Run a smaller selection while developing:
+
+```powershell
+python -m evals.run_retrieval --case-id wmt_latest_margin_call
+python -m evals.run_retrieval --limit 3 --fail-under 0.8
+```
+
+Add or revise human-approved cases in `evals/retrieval_cases.json` as the
+corpus and expected behavior evolve.
+
 ## 11. Stop PostgreSQL
 
 Stop PostgreSQL without deleting its data volume:

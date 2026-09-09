@@ -13,6 +13,9 @@ venv/
 data/faiss/*
 !data/faiss/.gitkeep
 
+# Local evaluation reports are generated from the versioned cases in evals/.
+data/evals/*.json
+
 # Downloaded SEC filings
 data/sec/raw/
 

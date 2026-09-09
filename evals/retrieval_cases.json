@@ -1,0 +1,185 @@
+{
+  "name": "alphalens_retrieval_v1",
+  "version": 1,
+  "cases": [
+    {
+      "id": "wmt_latest_margin_call",
+      "question": "What did Walmart management say about margins on the earnings call?",
+      "request": {
+        "ticker": "WMT",
+        "source_type": "transcripts",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["WMT"],
+        "routed_source_types": ["transcripts"],
+        "text_search_enabled": true,
+        "min_sources": 3,
+        "required_source_types": ["transcript"],
+        "allowed_fiscal_periods": ["2026Q4"],
+        "content_terms_any": ["margin", "profitability"]
+      }
+    },
+    {
+      "id": "wmt_historical_call_filter",
+      "question": "What did Walmart say about e-commerce during its fiscal 2025 Q4 earnings call?",
+      "request": {
+        "ticker": "WMT",
+        "source_type": "transcripts",
+        "fiscal_period": "2025Q4",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["WMT"],
+        "routed_source_types": ["transcripts"],
+        "text_search_enabled": true,
+        "min_sources": 3,
+        "required_source_types": ["transcript"],
+        "allowed_fiscal_periods": ["2025Q4"],
+        "content_terms_any": ["ecommerce", "e-commerce", "digital"]
+      }
+    },
+    {
+      "id": "nvda_latest_guidance_call",
+      "question": "What guidance did NVIDIA management provide on the latest earnings call?",
+      "request": {
+        "source_type": "auto",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["NVDA"],
+        "routed_source_types": ["transcripts"],
+        "text_search_enabled": true,
+        "min_sources": 3,
+        "required_source_types": ["transcript"],
+        "allowed_fiscal_periods": ["2026Q4"],
+        "content_terms_any": ["guidance", "outlook", "revenue"]
+      }
+    },
+    {
+      "id": "amzn_latest_aws_call",
+      "question": "What did Amazon management say about AWS on the latest earnings call?",
+      "request": {
+        "source_type": "auto",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["AMZN"],
+        "routed_source_types": ["transcripts"],
+        "text_search_enabled": true,
+        "min_sources": 3,
+        "required_source_types": ["transcript"],
+        "allowed_fiscal_periods": ["2026Q2"],
+        "content_terms_any": ["aws", "amazon web services"]
+      }
+    },
+    {
+      "id": "nvda_cybersecurity_risks",
+      "question": "What cybersecurity risks does NVIDIA describe in its annual filing?",
+      "request": {
+        "ticker": "NVDA",
+        "source_type": "filings",
+        "form_type": "10-K",
+        "section_key": "item_1a_risk_factors",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["NVDA"],
+        "routed_source_types": ["filings"],
+        "text_search_enabled": true,
+        "min_sources": 3,
+        "required_source_types": ["filing"],
+        "allowed_form_types": ["10-K"],
+        "required_section_keys": ["item_1a_risk_factors"],
+        "content_terms_any": ["cyber", "security"]
+      }
+    },
+    {
+      "id": "ba_supply_chain_risks",
+      "question": "What supply chain risks does Boeing identify in its 10-K risk factors?",
+      "request": {
+        "source_type": "filings",
+        "form_type": "10-K",
+        "section_key": "item_1a_risk_factors",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["BA"],
+        "routed_source_types": ["filings"],
+        "text_search_enabled": true,
+        "min_sources": 3,
+        "required_source_types": ["filing"],
+        "allowed_form_types": ["10-K"],
+        "required_section_keys": ["item_1a_risk_factors"],
+        "content_terms_any": ["supply", "supplier", "production"]
+      }
+    },
+    {
+      "id": "aapl_auto_filing_route",
+      "question": "What risk factors does Apple discuss in its annual report?",
+      "request": {
+        "source_type": "auto",
+        "form_type": "10-K",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["AAPL"],
+        "routed_source_types": ["filings"],
+        "text_search_enabled": true,
+        "min_sources": 3,
+        "required_source_types": ["filing"],
+        "allowed_form_types": ["10-K"],
+        "content_terms_any": ["risk"]
+      }
+    },
+    {
+      "id": "wmt_mixed_margin_sources",
+      "question": "Compare Walmart filings and earnings call comments about margins.",
+      "request": {
+        "ticker": "WMT",
+        "source_type": "both",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["WMT"],
+        "routed_source_types": ["filings", "transcripts"],
+        "text_search_enabled": true,
+        "min_sources": 6,
+        "required_source_types": ["filing", "transcript"],
+        "content_terms_any": ["margin", "profitability"]
+      }
+    },
+    {
+      "id": "nvda_market_vs_spy",
+      "question": "How has NVIDIA stock performed over the last year versus SPY?",
+      "request": {
+        "source_type": "auto",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["NVDA"],
+        "routed_source_types": ["filings", "transcripts"],
+        "text_search_enabled": false,
+        "max_sources": 0,
+        "min_market_snapshots": 1,
+        "market_tickers": ["NVDA"]
+      }
+    },
+    {
+      "id": "wmt_market_volume",
+      "question": "What is Walmart's recent trading volume and stock volatility?",
+      "request": {
+        "source_type": "auto",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["WMT"],
+        "routed_source_types": ["filings", "transcripts"],
+        "text_search_enabled": false,
+        "max_sources": 0,
+        "min_market_snapshots": 1,
+        "market_tickers": ["WMT"]
+      }
+    }
+  ]
+}
