@@ -158,6 +158,9 @@ python -m evals.run_responses --case-id wmt_latest_margin_answer
 # Complete local release gate: unit tests, preflight, retrieval, responses
 .\scripts\run_quality_gate.ps1
 
+# Validate the runner's corpus configuration without making OpenAI requests
+.\scripts\run_quality_gate.ps1 -SkipUnitTests -PreflightOnly
+
 # Download, parsing, and embedding status
 docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT download_status, parse_status, COUNT(*) FROM filings GROUP BY download_status, parse_status; SELECT embedding_status, COUNT(*) FROM filing_chunks GROUP BY embedding_status;"
 

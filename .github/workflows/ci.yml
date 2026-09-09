@@ -51,6 +51,7 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       ALPHALENS_FAISS_DIRECTORY: ${{ vars.ALPHALENS_FAISS_DIRECTORY }}
+      ALPHALENS_PYTHON: ${{ vars.ALPHALENS_PYTHON }}
       RAG_MODEL: ${{ vars.RAG_MODEL || 'gpt-5-mini' }}
       EVAL_JUDGE_MODEL: ${{ vars.EVAL_JUDGE_MODEL || 'gpt-5-mini' }}
       PYTHONUNBUFFERED: "1"
@@ -59,18 +60,29 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
+      # setup-python needs administrator access, 7-Zip, and a writable tool
+      # cache on Windows self-hosted runners. This personal runner already has
+      # AlphaLens' tested virtual environment, so use that interpreter directly.
+      - name: Check local Python
+        shell: powershell
+        run: |
+          if (-not $env:ALPHALENS_PYTHON) {
+            throw "Repository variable ALPHALENS_PYTHON is not configured."
+          }
+          if (-not (Test-Path -LiteralPath $env:ALPHALENS_PYTHON)) {
+            throw "Configured Python was not found: $env:ALPHALENS_PYTHON"
+          }
+          & $env:ALPHALENS_PYTHON --version
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        shell: powershell
+        run: '& $env:ALPHALENS_PYTHON -m pip install -r requirements.txt'
 
       - name: Run corpus-backed quality gate
-        shell: pwsh
-        run: ./scripts/run_quality_gate.ps1 -SkipUnitTests
+        shell: powershell
+        run: >-
+          powershell -NoProfile -ExecutionPolicy Bypass
+          -File ./scripts/run_quality_gate.ps1 -SkipUnitTests
 
       # Reports are useful even when a threshold fails. They show the exact
       # case, deterministic check, and model-judge reason behind the failure.

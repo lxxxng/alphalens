@@ -1,14 +1,25 @@
 param(
-    [switch]$SkipUnitTests
+    [switch]$SkipUnitTests,
+    [switch]$PreflightOnly
 )
 
 $ErrorActionPreference = "Stop"
 $env:PYTHONUNBUFFERED = "1"
 
-# Prefer the repository virtual environment for local runs. GitHub Actions
-# uses the Python selected by actions/setup-python and has no local .venv.
+# A self-hosted runner checkout does not contain the large local .venv. CI can
+# point ALPHALENS_PYTHON at the tested interpreter in the main workspace.
 $venvPython = Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe"
-$python = if (Test-Path $venvPython) { $venvPython } else { "python" }
+$python = if ($env:ALPHALENS_PYTHON) {
+    $env:ALPHALENS_PYTHON
+} elseif (Test-Path $venvPython) {
+    $venvPython
+} else {
+    "python"
+}
+
+if ($python -ne "python" -and -not (Test-Path -LiteralPath $python)) {
+    throw "Configured Python interpreter was not found: $python"
+}
 
 function Invoke-QualityCommand {
     param([string[]]$Arguments)
@@ -28,5 +39,10 @@ if (-not $SkipUnitTests) {
 # Preflight deliberately runs before retrieval so a missing database, index,
 # or secret cannot consume OpenAI requests and then fail halfway through.
 Invoke-QualityCommand @("-m", "evals.check_environment")
+
+if ($PreflightOnly) {
+    exit 0
+}
+
 Invoke-QualityCommand @("-m", "evals.run_retrieval")
 Invoke-QualityCommand @("-m", "evals.run_responses")

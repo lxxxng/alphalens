@@ -634,10 +634,12 @@ Configure the repository before enabling the required check:
 2. Add Actions secrets `DATABASE_URL` and `OPENAI_API_KEY`.
 3. Add the Actions variable `ALPHALENS_FAISS_DIRECTORY` containing the absolute
    path to this machine's populated `data\faiss` directory.
-4. Optionally add `RAG_MODEL` and `EVAL_JUDGE_MODEL` repository variables.
-5. Create a protected Actions environment named `corpus-evals` and require an
+4. Add `ALPHALENS_PYTHON` with the absolute path to the tested local interpreter,
+   such as `C:\Users\Lixing\Desktop\alphalens\.venv\Scripts\python.exe`.
+5. Optionally add `RAG_MODEL` and `EVAL_JUDGE_MODEL` repository variables.
+6. Create a protected Actions environment named `corpus-evals` and require an
    authorized reviewer before its jobs can start on the self-hosted machine.
-6. In **Settings > Branches**, require `Unit tests` and `Corpus quality gate`
+7. In **Settings > Branches**, require `Unit tests` and `Corpus quality gate`
    before merging.
 
 The self-hosted runner account must be able to reach PostgreSQL through the
@@ -654,6 +656,11 @@ Run the same gate locally:
 Preflight validates secrets, database row counts, index files, metadata, and
 embedding dimensions before any OpenAI request is made. GitHub uploads both
 JSON evaluation reports for 30 days even when the quality threshold fails.
+
+On the Windows self-hosted runner, the workflow uses `ALPHALENS_PYTHON`
+directly instead of asking `actions/setup-python` to install another Python.
+This avoids requiring an administrator runner process, 7-Zip, and a separate
+GitHub tool cache for the corpus job.
 
 ## 11. Stop PostgreSQL
 
