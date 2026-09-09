@@ -36,6 +36,22 @@ def check_environment() -> list[str]:
     if not os.getenv("DATABASE_URL"):
         errors.append("DATABASE_URL is missing.")
 
+    report_directory = Path(
+        os.getenv(
+            "ALPHALENS_EVAL_REPORT_DIRECTORY",
+            "data/evals",
+        )
+    )
+    try:
+        report_directory.mkdir(parents=True, exist_ok=True)
+        probe = report_directory / ".alphalens-write-test"
+        probe.write_text("ok", encoding="ascii")
+        probe.unlink()
+    except Exception as exception:
+        errors.append(
+            f"Evaluation report directory is not writable: {exception}"
+        )
+
     required_files = [
         SEC_INDEX_PATH,
         SEC_METADATA_PATH,

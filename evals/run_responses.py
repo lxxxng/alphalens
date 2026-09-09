@@ -24,11 +24,15 @@ from app.rag.generator import (
     get_rag_model,
 )
 from app.services.market_context import build_market_context_text
+from evals.reporting import write_report
 from evals.run_retrieval import add_check, summarize_sources
 
 
 DEFAULT_CASES_PATH = Path("evals/response_cases.json")
-DEFAULT_REPORT_PATH = Path("data/evals/response_report.json")
+DEFAULT_REPORT_DIRECTORY = Path(
+    os.getenv("ALPHALENS_EVAL_REPORT_DIRECTORY", "data/evals")
+)
+DEFAULT_REPORT_PATH = DEFAULT_REPORT_DIRECTORY / "response_report.json"
 DEFAULT_MIN_JUDGE_SCORE = 4
 MAX_JUDGE_OUTPUT_TOKENS = 2400
 CITATION_PATTERN = re.compile(r"\[S(\d+)\]")
@@ -544,6 +548,11 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MIN_JUDGE_SCORE,
         help="Minimum score for every judge dimension from 1 to 5 (default: 4).",
     )
+    parser.add_argument(
+        "--archive",
+        action="store_true",
+        help="Also preserve a timestamped report for dashboard trends.",
+    )
     return parser.parse_args()
 
 
@@ -589,8 +598,11 @@ def main() -> int:
         print_result(result)
 
     report = build_report(suite, results, args.cases, args.min_judge_score)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    archive_path = write_report(
+        report,
+        args.output,
+        archive=args.archive,
+    )
 
     summary = report["summary"]
     print()
@@ -606,6 +618,8 @@ def main() -> int:
     )
     print(f"Average judge scores: {score_text}")
     print(f"Report: {args.output}")
+    if archive_path:
+        print(f"Archive: {archive_path}")
 
     return 0 if summary["case_pass_rate"] >= args.fail_under else 1
 

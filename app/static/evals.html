@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AlphaLens Evaluations</title>
+    <link rel="stylesheet" href="/static/evals.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <div>
+            <p>AlphaLens</p>
+            <h1>Evaluation Monitor</h1>
+          </div>
+        </div>
+        <nav aria-label="Application navigation">
+          <a href="/">Research</a>
+          <a href="/docs">API Docs</a>
+          <button id="refresh-button" type="button">Refresh</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="eval-shell">
+      <section class="run-status" aria-live="polite">
+        <div>
+          <p class="eyebrow">Quality Gate</p>
+          <h2 id="gate-title">Loading evaluation reports</h2>
+        </div>
+        <div class="status-meta">
+          <span id="gate-status" class="status-badge loading">Loading</span>
+          <span id="updated-at">Waiting for reports</span>
+        </div>
+      </section>
+
+      <section id="error-banner" class="error-banner" hidden></section>
+
+      <section class="metric-strip" aria-label="Evaluation summary">
+        <article class="metric-card">
+          <span>Retrieval cases</span>
+          <strong id="retrieval-rate">--</strong>
+          <small id="retrieval-count">No report</small>
+        </article>
+        <article class="metric-card">
+          <span>Response cases</span>
+          <strong id="response-rate">--</strong>
+          <small id="response-count">No report</small>
+        </article>
+        <article class="metric-card">
+          <span>Checks passed</span>
+          <strong id="checks-rate">--</strong>
+          <small id="checks-count">No checks</small>
+        </article>
+        <article class="metric-card">
+          <span>Archived runs</span>
+          <strong id="history-count">0</strong>
+          <small>Retrieval and response</small>
+        </article>
+      </section>
+
+      <section class="quality-layout">
+        <div class="quality-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Response Judge</p>
+              <h2>Quality Dimensions</h2>
+            </div>
+            <span id="judge-model" class="subtle-label">No judge report</span>
+          </div>
+          <div id="dimension-list" class="dimension-list"></div>
+        </div>
+
+        <div class="quality-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">History</p>
+              <h2>Pass-Rate Trend</h2>
+            </div>
+            <div class="trend-legend" aria-label="Trend legend">
+              <span><i class="retrieval-key"></i>Retrieval</span>
+              <span><i class="response-key"></i>Response</span>
+            </div>
+          </div>
+          <div id="trend-chart" class="trend-chart">
+            <svg id="trend-svg" role="img" aria-label="Evaluation pass-rate history"></svg>
+            <p id="trend-empty" class="empty-state">No archived trend yet</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="cases-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Latest Run</p>
+            <h2>Evaluation Cases</h2>
+          </div>
+          <div class="case-tabs" role="group" aria-label="Case filter">
+            <button type="button" data-case-filter="all" class="active">All</button>
+            <button type="button" data-case-filter="failed">Failed</button>
+          </div>
+        </div>
+
+        <div class="case-table-wrap">
+          <table class="case-table">
+            <thead>
+              <tr>
+                <th>Case</th>
+                <th>Suite</th>
+                <th>Result</th>
+                <th>Checks</th>
+                <th>Judge scores</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody id="case-table-body"></tbody>
+          </table>
+          <p id="cases-empty" class="empty-state" hidden>No matching cases</p>
+        </div>
+
+        <aside id="case-inspector" class="case-inspector" hidden>
+          <div class="inspector-heading">
+            <div>
+              <p id="inspector-suite" class="eyebrow"></p>
+              <h3 id="inspector-title"></h3>
+            </div>
+            <button id="close-inspector" type="button" aria-label="Close case details">Close</button>
+          </div>
+          <p id="inspector-question" class="inspector-question"></p>
+          <div id="inspector-findings" class="inspector-findings"></div>
+          <div id="inspector-answer-block" class="answer-block" hidden>
+            <h4>Generated answer</h4>
+            <pre id="inspector-answer"></pre>
+          </div>
+        </aside>
+      </section>
+
+      <section class="run-ledger">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Archive</p>
+            <h2>Recent Runs</h2>
+          </div>
+        </div>
+        <div id="run-list" class="run-list"></div>
+      </section>
+    </main>
+
+    <script src="/static/evals.js"></script>
+  </body>
+</html>

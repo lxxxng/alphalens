@@ -51,6 +51,7 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       ALPHALENS_FAISS_DIRECTORY: ${{ vars.ALPHALENS_FAISS_DIRECTORY }}
+      ALPHALENS_EVAL_REPORT_DIRECTORY: ${{ vars.ALPHALENS_EVAL_REPORT_DIRECTORY }}
       ALPHALENS_PYTHON: ${{ vars.ALPHALENS_PYTHON }}
       RAG_MODEL: ${{ vars.RAG_MODEL || 'gpt-5-mini' }}
       EVAL_JUDGE_MODEL: ${{ vars.EVAL_JUDGE_MODEL || 'gpt-5-mini' }}
@@ -68,6 +69,9 @@ jobs:
         run: |
           if (-not $env:ALPHALENS_PYTHON) {
             throw "Repository variable ALPHALENS_PYTHON is not configured."
+          }
+          if (-not $env:ALPHALENS_EVAL_REPORT_DIRECTORY) {
+            throw "Repository variable ALPHALENS_EVAL_REPORT_DIRECTORY is not configured."
           }
           if (-not (Test-Path -LiteralPath $env:ALPHALENS_PYTHON)) {
             throw "Configured Python was not found: $env:ALPHALENS_PYTHON"
@@ -91,6 +95,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: evaluation-reports-${{ github.run_id }}
-          path: data/evals/*.json
+          path: |
+            ${{ env.ALPHALENS_EVAL_REPORT_DIRECTORY }}/retrieval_report.json
+            ${{ env.ALPHALENS_EVAL_REPORT_DIRECTORY }}/response_report.json
           if-no-files-found: warn
           retention-days: 30

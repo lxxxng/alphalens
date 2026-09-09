@@ -8,6 +8,7 @@ development and CI release gates.
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,10 +19,14 @@ from app.rag.generator import (
     wants_text_evidence,
 )
 from app.rag.retrievers.router import resolve_source_types
+from evals.reporting import write_report
 
 
 DEFAULT_CASES_PATH = Path("evals/retrieval_cases.json")
-DEFAULT_REPORT_PATH = Path("data/evals/retrieval_report.json")
+DEFAULT_REPORT_DIRECTORY = Path(
+    os.getenv("ALPHALENS_EVAL_REPORT_DIRECTORY", "data/evals")
+)
+DEFAULT_REPORT_PATH = DEFAULT_REPORT_DIRECTORY / "retrieval_report.json"
 
 SUPPORTED_EXPECTATIONS = {
     "allowed_fiscal_periods",
@@ -486,6 +491,11 @@ def parse_args() -> argparse.Namespace:
         default=1.0,
         help="Required case pass rate from 0 to 1 (default: 1).",
     )
+    parser.add_argument(
+        "--archive",
+        action="store_true",
+        help="Also preserve a timestamped report for dashboard trends.",
+    )
     return parser.parse_args()
 
 
@@ -548,13 +558,10 @@ def main() -> int:
         results=results,
         cases_path=args.cases,
     )
-    args.output.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-    args.output.write_text(
-        json.dumps(report, indent=2) + "\n",
-        encoding="utf-8",
+    archive_path = write_report(
+        report,
+        args.output,
+        archive=args.archive,
     )
 
     summary = report["summary"]
@@ -566,6 +573,8 @@ def main() -> int:
         f"{summary['passed_checks']}/{summary['total_checks']} checks passed."
     )
     print(f"Report: {args.output}")
+    if archive_path:
+        print(f"Archive: {archive_path}")
 
     return (
         0

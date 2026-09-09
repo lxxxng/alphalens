@@ -15,6 +15,7 @@ data/faiss/*
 
 # Local evaluation reports are generated from the versioned cases in evals/.
 data/evals/*.json
+data/evals/history/*.json
 
 # Downloaded SEC filings
 data/sec/raw/

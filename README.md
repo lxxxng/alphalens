@@ -619,6 +619,17 @@ case. `EVAL_JUDGE_MODEL` can select a judge independently from `RAG_MODEL`.
 Keep the deterministic checks as the hard guardrails and periodically review
 model-judge failures with a human before changing rubrics or thresholds.
 
+Open the internal evaluation monitor while the API is running:
+
+```text
+http://127.0.0.1:8000/evals
+```
+
+The dashboard reads local JSON reports only; refreshing it does not call
+OpenAI. It shows latest suite pass rates, response-judge dimensions, individual
+case failures, judge explanations, and archived pass-rate trends. Full quality
+gate runs preserve timestamped copies under `data/evals/history/`.
+
 ### Continuous-Integration Quality Gate
 
 `.github/workflows/ci.yml` runs unit tests on a GitHub-hosted runner for every
@@ -626,7 +637,7 @@ push and pull request. The corpus-backed retrieval and response suites run on
 a Windows self-hosted runner because the PostgreSQL corpus and FAISS indexes
 are intentionally not committed to Git.
 
-Configure the repository before enabling the required check:
+Configure the repository before running the corpus-backed job:
 
 1. In GitHub, open **Settings > Actions > Runners**, add a Windows self-hosted
    runner, ensure its runner version is at least `2.327.1`, and assign it the
@@ -634,13 +645,15 @@ Configure the repository before enabling the required check:
 2. Add Actions secrets `DATABASE_URL` and `OPENAI_API_KEY`.
 3. Add the Actions variable `ALPHALENS_FAISS_DIRECTORY` containing the absolute
    path to this machine's populated `data\faiss` directory.
-4. Add `ALPHALENS_PYTHON` with the absolute path to the tested local interpreter,
+4. Add `ALPHALENS_EVAL_REPORT_DIRECTORY` with the absolute path to the main
+   workspace's persistent `data\evals` directory.
+5. Add `ALPHALENS_PYTHON` with the absolute path to the tested local interpreter,
    such as `C:\Users\Lixing\Desktop\alphalens\.venv\Scripts\python.exe`.
-5. Optionally add `RAG_MODEL` and `EVAL_JUDGE_MODEL` repository variables.
-6. Create a protected Actions environment named `corpus-evals` and require an
-   authorized reviewer before its jobs can start on the self-hosted machine.
-7. In **Settings > Branches**, require `Unit tests` and `Corpus quality gate`
-   before merging.
+6. Optionally add `RAG_MODEL` and `EVAL_JUDGE_MODEL` repository variables.
+7. Create an Actions environment named `corpus-evals`. For a private side
+   project, required reviewers and deployment protection rules are optional.
+8. Optionally protect `main` and require `Unit tests` and
+   `Corpus quality gate` before merging.
 
 The self-hosted runner account must be able to reach PostgreSQL through the
 configured `DATABASE_URL` and read the FAISS directory. Keep the runner private

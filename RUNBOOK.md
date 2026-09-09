@@ -161,6 +161,9 @@ python -m evals.run_responses --case-id wmt_latest_margin_answer
 # Validate the runner's corpus configuration without making OpenAI requests
 .\scripts\run_quality_gate.ps1 -SkipUnitTests -PreflightOnly
 
+# Internal evaluation dashboard (served by the normal FastAPI command)
+# http://127.0.0.1:8000/evals
+
 # Download, parsing, and embedding status
 docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT download_status, parse_status, COUNT(*) FROM filings GROUP BY download_status, parse_status; SELECT embedding_status, COUNT(*) FROM filing_chunks GROUP BY embedding_status;"
 

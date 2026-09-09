@@ -44,5 +44,5 @@ if ($PreflightOnly) {
     exit 0
 }
 
-Invoke-QualityCommand @("-m", "evals.run_retrieval")
-Invoke-QualityCommand @("-m", "evals.run_responses")
+Invoke-QualityCommand @("-m", "evals.run_retrieval", "--archive")
+Invoke-QualityCommand @("-m", "evals.run_responses", "--archive")

@@ -31,6 +31,9 @@ from fastapi.staticfiles import StaticFiles
 from app.api.research import (
     router as research_router,
 )
+from app.api.evaluations import (
+    router as evaluations_router,
+)
 
 
 STATIC_DIRECTORY = (
@@ -68,6 +71,10 @@ app = FastAPI(
 
 app.include_router(
     research_router
+)
+
+app.include_router(
+    evaluations_router
 )
 
 
@@ -126,4 +133,16 @@ def root():
 
     return FileResponse(
         STATIC_DIRECTORY / "index.html"
+    )
+
+
+@app.get(
+    "/evals",
+    tags=["System"],
+)
+def evaluations_page():
+    """Serve the internal evaluation dashboard."""
+
+    return FileResponse(
+        STATIC_DIRECTORY / "evals.html"
     )
