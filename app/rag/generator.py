@@ -125,6 +125,10 @@ load_dotenv()
 DEFAULT_TOP_K = 5
 
 
+# Keep prompt size bounded while still allowing useful comparisons.
+MAX_COMPANIES_PER_QUERY = 4
+
+
 # Maximum response length from the answer-generating model.
 #
 # This does NOT mean the model must use all 1,200 tokens.
@@ -300,6 +304,157 @@ def wants_text_evidence(
         return False
 
     return True
+
+
+def resolve_question_tickers(
+    question: str,
+    ticker: str | None = None,
+) -> list[str]:
+    """
+    Resolve the ticker filter for one research request.
+    """
+
+    if ticker is not None:
+
+        # Caller-supplied ticker wins over automatic company-name detection.
+        return [
+            ticker.upper()
+        ]
+
+    return resolve_tickers(
+        question
+    )
+
+
+def collect_evidence(
+    question: str,
+    top_k: int = DEFAULT_TOP_K,
+    ticker: str | None = None,
+    form_type: str | None = None,
+    section_key: str | None = None,
+    fiscal_period: str | None = None,
+    source_type: str = "auto",
+) -> dict:
+    """
+    Collect all non-generative evidence for a research request.
+
+    This is the shared backbone for:
+
+        POST /api/research
+            retrieval + answer generation
+
+        POST /api/retrieval/preview
+            retrieval only
+    """
+
+    question = question.strip()
+
+
+    if not question:
+
+        raise ValueError(
+            "Question cannot be empty."
+        )
+
+
+    # ========================================================
+    # STEP 1 - DETECT COMPANIES
+    # ========================================================
+
+    detected_tickers = resolve_question_tickers(
+        question=question,
+        ticker=ticker,
+    )
+
+
+    # ========================================================
+    # Safety limit
+    # ========================================================
+    #
+    # A question mentioning 20 companies could cause:
+    #
+    #     20 retrieval searches
+    #     times
+    #     top_k chunks
+    #
+    # and create a very large generation prompt later.
+    # ========================================================
+
+    if (
+        len(detected_tickers)
+        > MAX_COMPANIES_PER_QUERY
+    ):
+
+        raise ValueError(
+            "AlphaLens currently supports comparisons "
+            f"between up to "
+            f"{MAX_COMPANIES_PER_QUERY} companies."
+        )
+
+
+    # ========================================================
+    # STEP 2 - STRUCTURED MARKET CONTEXT
+    # ========================================================
+    #
+    # Market prices are numeric data. They are calculated directly from
+    # PostgreSQL and supplied beside retrieved text evidence instead of
+    # being embedded into the vector index.
+    # ========================================================
+
+    market_context = []
+
+    if (
+        detected_tickers
+        and wants_market_context(question)
+    ):
+
+        market_context = get_market_context(
+            detected_tickers
+        )
+
+
+    # ========================================================
+    # STEP 3 - RETRIEVE TEXT EVIDENCE
+    # ========================================================
+
+    retrieved_results = []
+
+    if wants_text_evidence(
+        question=question,
+        source_type=source_type,
+    ):
+
+        retrieved_results = retrieve_evidence(
+
+            question=question,
+
+            top_k=top_k,
+
+            tickers=detected_tickers,
+
+            form_type=form_type,
+
+            section_key=section_key,
+
+            fiscal_period=fiscal_period,
+
+            source_type=source_type,
+        )
+
+
+    return {
+        "question":
+            question,
+
+        "detected_tickers":
+            detected_tickers,
+
+        "market_context":
+            market_context,
+
+        "retrieved_results":
+            retrieved_results,
+    }
 
 
 # ============================================================
@@ -867,133 +1022,23 @@ def answer_question(
         search entire AlphaLens SEC corpus
     """
 
-    question = question.strip()
-
-
-    if not question:
-
-        raise ValueError(
-            "Question cannot be empty."
-        )
-
-
-    # ========================================================
-    # STEP 1 - DETECT COMPANIES
-    # ========================================================
-
-    if ticker is not None:
-
-        # ----------------------------------------------------
-        # Caller explicitly supplied a ticker.
-        #
-        # Example API request:
-        #
-        #     {
-        #         "question": "...",
-        #         "ticker": "NVDA"
-        #     }
-        #
-        # Explicit filter takes priority over automatic
-        # detection.
-        # ----------------------------------------------------
-
-        detected_tickers = [
-            ticker.upper()
-        ]
-
-
-    else:
-
-        detected_tickers = (
-            resolve_tickers(
-                question
-            )
-        )
-
-
-    # ========================================================
-    # Safety limit
-    # ========================================================
-    #
-    # A question mentioning 20 companies could cause:
-    #
-    #     20 retrieval searches
-    #     times
-    #     top_k chunks
-    #
-    # and create a very large LLM prompt.
-    #
-    # Four companies is enough for our current AlphaLens
-    # comparison workflow.
-    # ========================================================
-
-    MAX_COMPANIES_PER_QUERY = 4
-
-
-    if (
-        len(detected_tickers)
-        > MAX_COMPANIES_PER_QUERY
-    ):
-
-        raise ValueError(
-            "AlphaLens currently supports comparisons "
-            f"between up to "
-            f"{MAX_COMPANIES_PER_QUERY} companies."
-        )
-
-
-    # ========================================================
-    # STEP 2 - STRUCTURED MARKET CONTEXT
-    # ========================================================
-    #
-    # Market prices are numeric data. They are calculated directly from
-    # PostgreSQL and supplied beside retrieved text evidence instead of
-    # being embedded into the vector index.
-    # ========================================================
-
-    market_context = []
-
-    if (
-        detected_tickers
-        and wants_market_context(question)
-    ):
-
-        market_context = get_market_context(
-            detected_tickers
-        )
-
-
-    # ========================================================
-    # STEP 3 - RETRIEVE
-    # ========================================================
-
-    retrieved_results = []
-
-    if wants_text_evidence(
+    evidence = collect_evidence(
         question=question,
+        top_k=top_k,
+        ticker=ticker,
+        form_type=form_type,
+        section_key=section_key,
+        fiscal_period=fiscal_period,
         source_type=source_type,
-    ):
+    )
 
-        retrieved_results = retrieve_evidence(
-
-            question=question,
-
-            top_k=top_k,
-
-            tickers=detected_tickers,
-
-            form_type=form_type,
-
-            section_key=section_key,
-
-            fiscal_period=fiscal_period,
-
-            source_type=source_type,
-        )
+    question = evidence["question"]
+    market_context = evidence["market_context"]
+    retrieved_results = evidence["retrieved_results"]
 
 
     # ========================================================
-    # STEP 4 - GENERATE GROUNDED ANSWER
+    # GENERATE GROUNDED ANSWER
     # ========================================================
 
     answer = generate_grounded_answer(
@@ -1007,7 +1052,7 @@ def answer_question(
 
 
     # ========================================================
-    # STEP 5 - STRUCTURED CITATIONS
+    # STRUCTURED CITATIONS
     # ========================================================
 
     sources = build_source_records(
@@ -1032,6 +1077,43 @@ def answer_question(
 
         "sources":
             sources,
+    }
+
+
+def preview_evidence(
+    question: str,
+    top_k: int = DEFAULT_TOP_K,
+    ticker: str | None = None,
+    form_type: str | None = None,
+    section_key: str | None = None,
+    fiscal_period: str | None = None,
+    source_type: str = "auto",
+) -> dict:
+    """
+    Return retrieved evidence without calling the answer-generation model.
+    """
+
+    evidence = collect_evidence(
+        question=question,
+        top_k=top_k,
+        ticker=ticker,
+        form_type=form_type,
+        section_key=section_key,
+        fiscal_period=fiscal_period,
+        source_type=source_type,
+    )
+
+    return {
+        "question":
+            evidence["question"],
+
+        "market_context":
+            evidence["market_context"],
+
+        "sources":
+            build_source_records(
+                evidence["retrieved_results"]
+            ),
     }
 
 

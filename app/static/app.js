@@ -8,6 +8,7 @@ const marketCount = document.querySelector("#market-count");
 const statusPill = document.querySelector("#status-pill");
 const resultTitle = document.querySelector("#result-title");
 const submitButton = document.querySelector("#submit-button");
+const previewButton = document.querySelector("#preview-button");
 const copyButton = document.querySelector("#copy-button");
 const sampleButton = document.querySelector("#sample-button");
 const tickerSelect = document.querySelector("#ticker");
@@ -47,6 +48,11 @@ let metadataReady = false;
 function setStatus(label, state = "") {
   statusPill.textContent = label;
   statusPill.className = `status-pill ${state}`.trim();
+}
+
+function setBusy(isBusy) {
+  submitButton.disabled = isBusy;
+  previewButton.disabled = isBusy;
 }
 
 function sourceLabel(source) {
@@ -547,24 +553,30 @@ copyButton.addEventListener("click", async () => {
 
 initializeMetadata();
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
+async function runResearchRequest(mode) {
   const payload = payloadFromForm(
     new FormData(form)
   );
 
-  submitButton.disabled = true;
+  const isPreview = mode === "preview";
+
+  setBusy(true);
   setStatus("Running", "loading");
-  resultTitle.textContent = "Searching";
-  answer.textContent = "Retrieving evidence and generating the answer...";
+  resultTitle.textContent = isPreview ? "Previewing" : "Searching";
+  answer.textContent = isPreview
+    ? "Retrieving evidence only..."
+    : "Retrieving evidence and generating the answer...";
   renderMarketContext([]);
   renderSources([]);
 
   try {
     // The static UI is served by the same FastAPI app, so a relative URL
     // works locally and keeps deployment simple later.
-    const response = await fetch("/api/research", {
+    const endpoint = isPreview
+      ? "/api/retrieval/preview"
+      : "/api/research";
+
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -579,7 +591,15 @@ form.addEventListener("submit", async (event) => {
     }
 
     resultTitle.textContent = "Complete";
-    answer.textContent = data.answer;
+    answer.textContent = isPreview
+      ? [
+          "Evidence preview loaded.",
+          `${(data.sources || []).length} text source(s) found.`,
+          `${(data.market_context || []).length} market snapshot(s) found.`,
+          "",
+          "Open the source cards below to inspect the exact retrieved chunks.",
+        ].join("\n")
+      : data.answer;
     renderMarketContext(data.market_context || []);
     renderSources(data.sources || []);
     setStatus("Done");
@@ -588,6 +608,16 @@ form.addEventListener("submit", async (event) => {
     answer.textContent = error.message;
     setStatus("Error", "error");
   } finally {
-    submitButton.disabled = false;
+    setBusy(false);
   }
+}
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  await runResearchRequest("answer");
+});
+
+previewButton.addEventListener("click", async () => {
+  await runResearchRequest("preview");
 });

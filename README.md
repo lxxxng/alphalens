@@ -483,6 +483,27 @@ GET /api/metadata/filing-sections?ticker=NVDA&form_type=10-K
 
 These routes read the local database and do not call OpenAI.
 
+Preview retrieval without generating an answer:
+
+```json
+{
+  "question": "What did Walmart management say about margins on the earnings call?",
+  "ticker": "WMT",
+  "source_type": "transcripts",
+  "top_k": 3
+}
+```
+
+Send that payload to:
+
+```text
+POST /api/retrieval/preview
+```
+
+This returns `sources` and `market_context` but no generated answer. It is
+useful for checking whether retrieval found the right evidence before using
+the full `POST /api/research` answer-generation endpoint.
+
 ### Market Data In RAG
 
 Market prices are used as structured SQL context, not vector embeddings.

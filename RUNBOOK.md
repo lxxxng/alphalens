@@ -129,6 +129,9 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/transcript-periods?ticker=
 Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/filing-types?ticker=NVDA"
 Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/filing-sections?ticker=NVDA&form_type=10-K"
 
+# Evidence preview smoke test, retrieval only and no generated answer
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/retrieval/preview" -ContentType "application/json" -Body '{"question":"How has NVIDIA stock performed over the last year versus SPY?","ticker":"NVDA","source_type":"auto","top_k":3}'
+
 # Market context smoke test
 .\.venv\Scripts\python.exe -c "from app.services.market_context import get_market_context, build_market_context_text; data=get_market_context(['NVDA']); print(data[0]['ticker'], data[0]['latest_trading_date'], round(data[0]['returns']['1Y'], 4)); print(build_market_context_text(data).splitlines()[:5])"
 

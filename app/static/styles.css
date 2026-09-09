@@ -236,14 +236,30 @@ select:focus {
   font-weight: 800;
 }
 
-.primary-button {
+.form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.primary-button,
+.secondary-button {
   height: 44px;
-  border: 0;
   border-radius: 6px;
-  background: var(--accent);
-  color: white;
   font-weight: 800;
   cursor: pointer;
+}
+
+.primary-button {
+  border: 0;
+  background: var(--accent);
+  color: white;
+}
+
+.secondary-button {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 
 .ghost-button {
@@ -264,8 +280,11 @@ select:focus {
   color: var(--accent-strong);
 }
 
-.primary-button:disabled {
+.primary-button:disabled,
+.secondary-button:disabled {
   background: #9cad9f;
+  border-color: #9cad9f;
+  color: white;
   cursor: wait;
 }
 
@@ -510,7 +529,8 @@ select:focus {
 
 @media (max-width: 560px) {
   .control-grid,
-  .source-picker {
+  .source-picker,
+  .form-actions {
     grid-template-columns: 1fr;
   }
 

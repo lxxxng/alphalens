@@ -98,6 +98,7 @@ from pydantic import (
 
 from app.rag.generator import (
     answer_question,
+    preview_evidence,
 )
 
 from app.services.metadata import (
@@ -439,6 +440,20 @@ class ResearchResponse(BaseModel):
     sources: list[ResearchSource]
 
 
+class EvidencePreviewResponse(BaseModel):
+    """
+    JSON returned by POST /api/retrieval/preview.
+    """
+
+    question: str
+
+    market_context: list[MarketSnapshot] = Field(
+        default_factory=list
+    )
+
+    sources: list[ResearchSource]
+
+
 # ============================================================
 # POST /api/research
 # ============================================================
@@ -579,6 +594,83 @@ def research(
             detail=(
                 "AlphaLens could not complete the "
                 "research request."
+            ),
+        ) from error
+
+
+# ============================================================
+# POST /api/retrieval/preview
+# ============================================================
+
+@router.post(
+    "/retrieval/preview",
+
+    response_model=EvidencePreviewResponse,
+
+    summary="Preview retrieved AlphaLens evidence",
+)
+def retrieval_preview(
+    request: ResearchRequest,
+):
+    """
+    Retrieve evidence without calling the answer-generation model.
+
+    This endpoint is useful when debugging:
+
+        ticker detection
+        source_type routing
+        transcript fiscal-period filters
+        SEC filing filters
+        market_context calculations
+
+    It may still create a query embedding for semantic search, but it
+    does not send retrieved evidence to the answer generator.
+    """
+
+    try:
+
+        result = preview_evidence(
+
+            question=request.question,
+
+            top_k=request.top_k,
+
+            ticker=request.ticker,
+
+            form_type=request.form_type,
+
+            section_key=request.section_key,
+
+            fiscal_period=request.fiscal_period,
+
+            source_type=request.source_type,
+        )
+
+
+        return result
+
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        ) from error
+
+
+    except Exception as error:
+
+        print(
+            f"[API ERROR] "
+            f"/api/retrieval/preview: "
+            f"{error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "AlphaLens could not preview retrieved "
+                "evidence."
             ),
         ) from error
 
