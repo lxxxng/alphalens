@@ -7,6 +7,7 @@ from app.services.market_context import (
     build_market_context_text,
     build_market_price_series,
     build_ticker_snapshot,
+    calculate_event_reactions,
     downsample_rows,
     filter_rows_for_period,
 )
@@ -50,6 +51,32 @@ class MarketHistoryTests(unittest.TestCase):
         self.assertEqual(len(sampled), 5)
         self.assertEqual(sampled[0], rows[0])
         self.assertEqual(sampled[-1], rows[-1])
+
+    def test_event_reactions_use_forward_trading_sessions(self):
+        rows = _rows(8)
+        reactions = calculate_event_reactions(
+            rows,
+            date(2026, 1, 2),
+        )
+
+        self.assertEqual(reactions["plot_date"], "2026-01-02")
+        self.assertAlmostEqual(
+            reactions["reaction_1d"],
+            102 / 101 - 1,
+        )
+        self.assertAlmostEqual(
+            reactions["reaction_5d"],
+            106 / 101 - 1,
+        )
+
+    def test_event_reactions_tolerate_missing_forward_prices(self):
+        reactions = calculate_event_reactions(
+            _rows(3),
+            date(2026, 1, 3),
+        )
+
+        self.assertIsNone(reactions["reaction_1d"])
+        self.assertIsNone(reactions["reaction_5d"])
 
     def test_snapshot_and_prompt_include_absolute_benchmark_returns(self):
         benchmark_returns = {

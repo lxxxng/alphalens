@@ -543,7 +543,11 @@ chunks into the prompt.
 
 The research console also loads adjusted-close history for the selected
 ticker and SPY. Both series are indexed to 100 at the start of the selected
-1M, 3M, 1Y, or 5Y period so their performance can be compared directly.
+1M, 3M, 1Y, or 5Y period; the chart presents that index as cumulative return
+from 0% so the left axis cannot be mistaken for a share price. The same API
+response includes dated earnings-call and SEC filing events. Event reactions
+compare adjusted close on the event date (or the preceding trading session)
+with the next and fifth subsequent trading sessions.
 
 ```text
 GET /api/market/prices?ticker=NVDA&period=1Y

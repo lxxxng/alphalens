@@ -6,7 +6,8 @@
     <title>AlphaLens Research</title>
     <!-- Version static assets so a long-running local browser cannot combine
          new markup with a stale stylesheet or script. -->
-    <link rel="stylesheet" href="/static/styles.css?v=20260909.2">
+    <link rel="stylesheet" href="/static/styles.css?v=20260909.3">
+    <link rel="stylesheet" href="/static/navigation.css?v=20260909.3">
   </head>
   <body>
     <header class="app-header">
@@ -162,35 +163,27 @@
         </section>
       </aside>
 
-      <!-- The answer pane is intentionally source-first: every generated
-           claim should be traceable back to an expandable citation card. -->
+      <!-- Market reaction leads the workspace; generated analysis and its
+           auditable evidence remain together directly below the chart. -->
       <section class="answer-panel" aria-live="polite">
-        <div class="answer-header">
-          <div>
-            <p class="eyebrow">Investment Brief</p>
-            <h2 id="result-title">Ready</h2>
-          </div>
-          <div class="answer-actions">
-            <button id="copy-button" class="ghost-button" type="button">
-              Copy
-            </button>
-            <span id="status-pill" class="status-pill">Idle</span>
-          </div>
-        </div>
-
-        <article id="answer" class="answer-text">Ask a question to search SEC filings, earnings call transcripts, or both.</article>
-
         <section class="price-chart-panel" aria-labelledby="price-chart-title">
           <div class="chart-header">
             <div>
-              <p class="eyebrow">Market Data</p>
-              <h3 id="price-chart-title">Price Performance</h3>
+              <p class="eyebrow">Market Intelligence</p>
+              <h2 id="price-chart-title">Price &amp; Event Monitor</h2>
             </div>
-            <div class="range-picker" aria-label="Chart period">
-              <button type="button" data-period="1M" aria-pressed="false">1M</button>
-              <button type="button" data-period="3M" aria-pressed="false">3M</button>
-              <button type="button" data-period="1Y" class="active" aria-pressed="true">1Y</button>
-              <button type="button" data-period="5Y" aria-pressed="false">5Y</button>
+            <div class="chart-controls">
+              <div class="event-picker" aria-label="Chart events">
+                <button type="button" data-event-filter="all" class="active" aria-pressed="true">All events</button>
+                <button type="button" data-event-filter="earnings" aria-pressed="false">Earnings</button>
+                <button type="button" data-event-filter="filing" aria-pressed="false">Filings</button>
+              </div>
+              <div class="range-picker" aria-label="Chart period">
+                <button type="button" data-period="1M" aria-pressed="false">1M</button>
+                <button type="button" data-period="3M" aria-pressed="false">3M</button>
+                <button type="button" data-period="1Y" class="active" aria-pressed="true">1Y</button>
+                <button type="button" data-period="5Y" aria-pressed="false">5Y</button>
+              </div>
             </div>
           </div>
           <div class="chart-summary">
@@ -198,34 +191,71 @@
             <span id="chart-period-return">Loading prices...</span>
             <span id="chart-date-range"></span>
           </div>
+          <div class="chart-kpis" aria-label="Market performance summary">
+            <div>
+              <span>Company return</span>
+              <strong id="chart-company-return">--</strong>
+            </div>
+            <div>
+              <span id="chart-benchmark-label">SPY return</span>
+              <strong id="chart-benchmark-return">--</strong>
+            </div>
+            <div>
+              <span>Relative performance</span>
+              <strong id="chart-relative-return">--</strong>
+            </div>
+            <div>
+              <span>Visible events</span>
+              <strong id="chart-event-count">--</strong>
+            </div>
+          </div>
+          <p class="chart-axis-caption">Y-axis · cumulative return since period start (%)</p>
           <div id="price-chart" class="price-chart" aria-live="polite">
             <svg
               id="price-chart-svg"
               role="img"
-              aria-label="Indexed stock performance chart"
+              aria-label="Stock and benchmark percentage-return chart with earnings and filing events"
             ></svg>
             <div id="chart-tooltip" class="chart-tooltip" hidden></div>
             <p id="chart-empty" class="chart-empty">Loading market data...</p>
           </div>
           <div id="chart-legend" class="chart-legend"></div>
+          <div id="market-events" class="market-events" aria-live="polite"></div>
         </section>
 
-        <section id="market-panel" class="market-panel" hidden>
-          <div class="sources-header">
-            <h3>Market Snapshot</h3>
-            <span id="market-count">0</span>
+        <section class="research-output">
+          <div class="answer-header">
+            <div>
+              <p class="eyebrow">Investment Brief</p>
+              <h2 id="result-title">Ready</h2>
+            </div>
+            <div class="answer-actions">
+              <button id="copy-button" class="ghost-button" type="button">
+                Copy
+              </button>
+              <span id="status-pill" class="status-pill">Idle</span>
+            </div>
           </div>
-          <div id="market-snapshots" class="market-grid"></div>
-        </section>
 
-        <div class="sources-header">
-          <h3>Sources</h3>
-          <span id="source-count">0</span>
-        </div>
-        <div id="sources" class="sources-list"></div>
+          <article id="answer" class="answer-text">Ask a question to search SEC filings, earnings call transcripts, or both.</article>
+
+          <section id="market-panel" class="market-panel" hidden>
+            <div class="sources-header">
+              <h3>Market Snapshot</h3>
+              <span id="market-count">0</span>
+            </div>
+            <div id="market-snapshots" class="market-grid"></div>
+          </section>
+
+          <div class="sources-header">
+            <h3>Sources</h3>
+            <span id="source-count">0</span>
+          </div>
+          <div id="sources" class="sources-list"></div>
+        </section>
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260909.2"></script>
+    <script src="/static/app.js?v=20260909.3"></script>
   </body>
 </html>

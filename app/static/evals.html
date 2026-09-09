@@ -4,22 +4,24 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>AlphaLens Evaluations</title>
-    <link rel="stylesheet" href="/static/evals.css">
+    <link rel="stylesheet" href="/static/evals.css?v=20260909.3">
+    <link rel="stylesheet" href="/static/navigation.css?v=20260909.3">
   </head>
   <body>
-    <header class="topbar">
-      <div class="topbar-inner">
-        <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true">A</span>
-          <div>
-            <p>AlphaLens</p>
-            <h1>Evaluation Monitor</h1>
-          </div>
-        </div>
-        <nav aria-label="Application navigation">
-          <a href="/">Research</a>
-          <a href="/docs">API Docs</a>
-          <button id="refresh-button" type="button">Refresh</button>
+    <header class="app-header">
+      <div class="app-header-inner">
+        <a class="product-lockup" href="/" aria-label="AlphaLens research home">
+          <span class="product-mark" aria-hidden="true">A</span>
+          <span>
+            <strong>AlphaLens</strong>
+            <small>Research Intelligence</small>
+          </span>
+        </a>
+        <nav class="global-nav" aria-label="Application navigation">
+          <a class="nav-link" href="/">Research</a>
+          <a class="nav-link active" href="/evals">Evaluations</a>
+          <a class="nav-link" href="/docs">API</a>
+          <button id="refresh-button" class="nav-action" type="button">Refresh reports</button>
         </nav>
       </div>
     </header>
@@ -148,6 +150,6 @@
       </section>
     </main>
 
-    <script src="/static/evals.js"></script>
+    <script src="/static/evals.js?v=20260909.3"></script>
   </body>
 </html>

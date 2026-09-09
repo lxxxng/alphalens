@@ -26,7 +26,14 @@ const chartPeriodReturn = document.querySelector("#chart-period-return");
 const chartDateRange = document.querySelector("#chart-date-range");
 const chartLegend = document.querySelector("#chart-legend");
 const chartPeriodButtons = document.querySelectorAll("[data-period]");
-const answerPanel = document.querySelector(".answer-panel");
+const chartEventButtons = document.querySelectorAll("[data-event-filter]");
+const chartCompanyReturn = document.querySelector("#chart-company-return");
+const chartBenchmarkLabel = document.querySelector("#chart-benchmark-label");
+const chartBenchmarkReturn = document.querySelector("#chart-benchmark-return");
+const chartRelativeReturn = document.querySelector("#chart-relative-return");
+const chartEventCount = document.querySelector("#chart-event-count");
+const marketEvents = document.querySelector("#market-events");
+const researchOutput = document.querySelector(".research-output");
 const historyList = document.querySelector("#history-list");
 const historyRefreshButton = document.querySelector("#history-refresh");
 
@@ -59,11 +66,16 @@ const samples = [
 let sampleIndex = 0;
 let metadataReady = false;
 let selectedChartPeriod = "1Y";
+let selectedEventFilter = "all";
 let marketChartData = null;
 let marketChartRequest = 0;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-const CHART_COLORS = ["#116b55", "#245c91"];
+const CHART_COLORS = ["#087f5b", "#d97706"];
+const EVENT_COLORS = {
+  earnings: "#7c3aed",
+  filing: "#2563eb",
+};
 
 function setStatus(label, state = "") {
   statusPill.textContent = label;
@@ -276,7 +288,7 @@ async function openSavedResearchRun(runId) {
     setStatus("History");
 
     if (window.innerWidth <= 900) {
-      answerPanel.scrollIntoView({
+      researchOutput.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
@@ -567,9 +579,37 @@ function chartLinePath(points, xScale, yScale) {
   return points.map((point, index) => {
     const command = index === 0 ? "M" : "L";
     const x = xScale(point.date).toFixed(2);
-    const y = yScale(point.indexed_value).toFixed(2);
+    const y = yScale(point.indexed_value - 100).toFixed(2);
     return `${command}${x},${y}`;
   }).join(" ");
+}
+
+function formatReturn(value, fractionDigits = 1) {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+
+  const percentage = value * 100;
+  const sign = percentage > 0 ? "+" : "";
+  return `${sign}${percentage.toFixed(fractionDigits)}%`;
+}
+
+function setReturnClass(element, value) {
+  element.className = Number.isFinite(value)
+    ? (value >= 0 ? "positive" : "negative")
+    : "";
+}
+
+function visibleMarketEvents() {
+  const events = marketChartData?.events || [];
+
+  if (selectedEventFilter === "all") {
+    return events;
+  }
+
+  return events.filter(
+    (event) => event.event_type === selectedEventFilter
+  );
 }
 
 function formatChartDate(value) {
@@ -584,12 +624,17 @@ function formatChartDate(value) {
 function setChartLoading(message) {
   priceChartSvg.replaceChildren();
   chartLegend.replaceChildren();
+  marketEvents.replaceChildren();
   chartTooltip.hidden = true;
   chartEmpty.hidden = false;
   chartEmpty.textContent = message;
+  chartCompanyReturn.textContent = "--";
+  chartBenchmarkReturn.textContent = "--";
+  chartRelativeReturn.textContent = "--";
+  chartEventCount.textContent = "--";
 }
 
-function renderChartLegend(series) {
+function renderChartLegend(series, events) {
   chartLegend.replaceChildren();
 
   series.forEach((item, index) => {
@@ -604,9 +649,26 @@ function renderChartLegend(series) {
     chartLegend.appendChild(legendItem);
   });
 
+  for (const [eventType, label] of [
+    ["earnings", "Earnings call"],
+    ["filing", "SEC filing"],
+  ]) {
+    if (!events.some((event) => event.event_type === eventType)) {
+      continue;
+    }
+
+    const legendItem = document.createElement("span");
+    legendItem.className = "event-legend-item";
+    const marker = document.createElement("b");
+    marker.style.backgroundColor = EVENT_COLORS[eventType];
+    marker.textContent = eventType === "earnings" ? "E" : "F";
+    legendItem.append(marker, label);
+    chartLegend.appendChild(legendItem);
+  }
+
   const note = document.createElement("span");
   note.className = "chart-index-note";
-  note.textContent = "Indexed to 100 at start";
+  note.textContent = "Adjusted close";
   chartLegend.appendChild(note);
 }
 
@@ -629,7 +691,7 @@ function renderChartTooltip(date, rows, left, top) {
     swatch.style.backgroundColor = CHART_COLORS[index];
     item.append(
       swatch,
-      `${row.ticker} ${row.point.indexed_value.toFixed(1)} (${formatNumber(row.point.close)})`
+      `${row.ticker} ${formatReturn((row.point.indexed_value - 100) / 100)} · $${formatNumber(row.point.close)}`
     );
     chartTooltip.appendChild(item);
   });
@@ -637,6 +699,68 @@ function renderChartTooltip(date, rows, left, top) {
   chartTooltip.hidden = false;
   chartTooltip.style.left = `${left}px`;
   chartTooltip.style.top = `${top}px`;
+}
+
+function renderEventTooltip(event, left, top) {
+  const title = document.createElement("strong");
+  title.textContent = `${event.event_type === "earnings" ? "Earnings" : "SEC filing"} · ${event.label}`;
+  const date = document.createElement("span");
+  date.textContent = formatChartDate(event.date);
+  const nextSession = document.createElement("span");
+  nextSession.textContent = `Next session ${formatReturn(event.reaction_1d)}`;
+  const fiveSessions = document.createElement("span");
+  fiveSessions.textContent = `Five sessions ${formatReturn(event.reaction_5d)}`;
+  chartTooltip.replaceChildren(title, date, nextSession, fiveSessions);
+  chartTooltip.hidden = false;
+  chartTooltip.style.left = `${left}px`;
+  chartTooltip.style.top = `${top}px`;
+}
+
+function renderMarketEvents(events) {
+  marketEvents.replaceChildren();
+
+  if (!events.length) {
+    const empty = document.createElement("p");
+    empty.className = "market-events-empty";
+    empty.textContent = "No earnings calls or SEC filings in this period.";
+    marketEvents.appendChild(empty);
+    return;
+  }
+
+  for (const event of [...events].reverse().slice(0, 8)) {
+    const row = document.createElement(event.source_url ? "a" : "div");
+    row.className = `market-event-row ${event.event_type}`;
+
+    if (event.source_url) {
+      row.href = event.source_url;
+      row.target = "_blank";
+      row.rel = "noreferrer";
+    }
+
+    const marker = document.createElement("span");
+    marker.className = "market-event-icon";
+    marker.textContent = event.event_type === "earnings" ? "E" : "F";
+
+    const description = document.createElement("span");
+    const title = document.createElement("strong");
+    title.textContent = event.label;
+    const date = document.createElement("small");
+    date.textContent = formatChartDate(event.date);
+    description.append(title, date);
+
+    const oneDay = document.createElement("span");
+    oneDay.className = "event-reaction";
+    oneDay.innerHTML = `<small>Next session</small><strong>${formatReturn(event.reaction_1d)}</strong>`;
+    setReturnClass(oneDay.querySelector("strong"), event.reaction_1d);
+
+    const fiveDay = document.createElement("span");
+    fiveDay.className = "event-reaction";
+    fiveDay.innerHTML = `<small>5 sessions</small><strong>${formatReturn(event.reaction_5d)}</strong>`;
+    setReturnClass(fiveDay.querySelector("strong"), event.reaction_5d);
+
+    row.append(marker, description, oneDay, fiveDay);
+    marketEvents.appendChild(row);
+  }
 }
 
 function renderMarketChart() {
@@ -647,19 +771,19 @@ function renderMarketChart() {
 
   const width = Math.max(priceChart.clientWidth, 320);
   const height = Math.max(priceChart.clientHeight, 240);
-  const margin = { top: 18, right: 18, bottom: 34, left: 48 };
+  const margin = { top: 32, right: 24, bottom: 38, left: 58 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
   const allPoints = marketChartData.series.flatMap((item) => item.points);
   const timestamps = allPoints.map(
     (point) => Date.parse(`${point.date}T00:00:00Z`)
   );
-  const values = allPoints.map((point) => point.indexed_value);
+  const values = allPoints.map((point) => point.indexed_value - 100);
   const minTime = Math.min(...timestamps);
   const maxTime = Math.max(...timestamps);
-  const rawMin = Math.min(...values);
-  const rawMax = Math.max(...values);
-  const valuePadding = Math.max((rawMax - rawMin) * 0.1, 2);
+  const rawMin = Math.min(0, ...values);
+  const rawMax = Math.max(0, ...values);
+  const valuePadding = Math.max((rawMax - rawMin) * 0.08, 1);
   const minValue = rawMin - valuePadding;
   const maxValue = rawMax + valuePadding;
 
@@ -679,8 +803,8 @@ function renderMarketChart() {
   priceChartSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   chartEmpty.hidden = true;
 
-  // Exact grid labels keep the compact chart readable without adding a
-  // heavyweight charting dependency to the frontend.
+  // Percentage-return labels avoid making the start-at-100 comparison look
+  // like a dollar-price axis.
   for (let index = 0; index < 5; index += 1) {
     const ratio = index / 4;
     const value = maxValue - ratio * (maxValue - minValue);
@@ -700,22 +824,43 @@ function renderMarketChart() {
       class: "chart-axis-label",
       "text-anchor": "end",
     });
-    label.textContent = value.toFixed(0);
+    label.textContent = `${value > 0 ? "+" : ""}${value.toFixed(0)}%`;
     priceChartSvg.appendChild(label);
   }
 
-  [marketChartData.start_date, marketChartData.end_date].forEach(
+  const primaryPoints = marketChartData.series[0].points;
+  const dateLabels = [0, 0.25, 0.5, 0.75, 1].map(
+    (ratio) => primaryPoints[
+      Math.round(ratio * (primaryPoints.length - 1))
+    ].date
+  );
+
+  dateLabels.forEach(
     (date, index) => {
       const label = svgElement("text", {
-        x: index === 0 ? margin.left : width - margin.right,
+        x: xScale(date),
         y: height - 9,
         class: "chart-axis-label",
-        "text-anchor": index === 0 ? "start" : "end",
+        "text-anchor": (
+          index === 0
+            ? "start"
+            : (index === dateLabels.length - 1 ? "end" : "middle")
+        ),
       });
       label.textContent = formatChartDate(date);
       priceChartSvg.appendChild(label);
     }
   );
+
+  if (minValue <= 0 && maxValue >= 0) {
+    priceChartSvg.appendChild(svgElement("line", {
+      x1: margin.left,
+      x2: width - margin.right,
+      y1: yScale(0),
+      y2: yScale(0),
+      class: "chart-zero-line",
+    }));
+  }
 
   marketChartData.series.forEach((item, index) => {
     priceChartSvg.appendChild(svgElement("path", {
@@ -778,7 +923,76 @@ function renderMarketChart() {
   });
 
   priceChartSvg.appendChild(interaction);
-  renderChartLegend(marketChartData.series);
+
+  const events = visibleMarketEvents().filter(
+    (event) => event.plot_date
+  );
+  const eventStacks = new Map();
+
+  for (const event of events) {
+    const point = closestChartPoint(
+      primaryPoints,
+      Date.parse(`${event.plot_date}T00:00:00Z`)
+    );
+    const lineX = xScale(event.plot_date);
+    const lineY = yScale(point.indexed_value - 100);
+    const stackKey = `${event.plot_date}-${event.event_type}`;
+    const stackIndex = eventStacks.get(stackKey) || 0;
+    eventStacks.set(stackKey, stackIndex + 1);
+    const direction = event.event_type === "earnings" ? -1 : 1;
+    const markerY = Math.max(
+      margin.top + 12,
+      Math.min(
+        height - margin.bottom - 12,
+        lineY + direction * (18 + stackIndex * 21)
+      )
+    );
+
+    priceChartSvg.appendChild(svgElement("line", {
+      x1: lineX,
+      x2: lineX,
+      y1: lineY,
+      y2: markerY,
+      class: `event-stem ${event.event_type}`,
+    }));
+
+    const marker = svgElement("g", {
+      class: `event-marker ${event.event_type}`,
+      role: "img",
+      "aria-label": `${event.label} on ${event.date}`,
+    });
+    marker.appendChild(svgElement("circle", {
+      cx: lineX,
+      cy: markerY,
+      r: 10,
+      fill: EVENT_COLORS[event.event_type],
+    }));
+    const glyph = svgElement("text", {
+      x: lineX,
+      y: markerY + 3.5,
+      "text-anchor": "middle",
+      class: "event-marker-glyph",
+    });
+    glyph.textContent = event.event_type === "earnings" ? "E" : "F";
+    marker.appendChild(glyph);
+
+    marker.addEventListener("pointerenter", () => {
+      const bounds = priceChartSvg.getBoundingClientRect();
+      renderEventTooltip(
+        event,
+        Math.max(8, Math.min(lineX / width * bounds.width + 12, bounds.width - 183)),
+        Math.max(8, markerY / height * bounds.height - 86)
+      );
+    });
+    marker.addEventListener("pointerleave", () => {
+      chartTooltip.hidden = true;
+    });
+    priceChartSvg.appendChild(marker);
+  }
+
+  renderChartLegend(marketChartData.series, events);
+  renderMarketEvents(events);
+  chartEventCount.textContent = String(events.length);
 }
 
 function updateChartSummary(data) {
@@ -786,11 +1000,27 @@ function updateChartSummary(data) {
   const first = primarySeries.points[0];
   const last = primarySeries.points[primarySeries.points.length - 1];
   const periodReturn = last.indexed_value / first.indexed_value - 1;
+  const benchmarkSeries = data.series.find(
+    (series) => series.ticker === data.benchmark_ticker
+  );
+  const benchmarkReturn = benchmarkSeries
+    ? benchmarkSeries.points.at(-1).indexed_value / benchmarkSeries.points[0].indexed_value - 1
+    : null;
+  const relativeReturn = Number.isFinite(benchmarkReturn)
+    ? periodReturn - benchmarkReturn
+    : null;
 
   chartTicker.textContent = data.ticker;
   chartPeriodReturn.textContent = `${formatPercent(periodReturn)} over ${data.period}`;
   chartPeriodReturn.className = periodReturn >= 0 ? "positive" : "negative";
   chartDateRange.textContent = `${formatChartDate(data.start_date)} - ${formatChartDate(data.end_date)}`;
+  chartCompanyReturn.textContent = formatReturn(periodReturn);
+  chartBenchmarkLabel.textContent = `${data.benchmark_ticker} return`;
+  chartBenchmarkReturn.textContent = formatReturn(benchmarkReturn);
+  chartRelativeReturn.textContent = formatReturn(relativeReturn);
+  setReturnClass(chartCompanyReturn, periodReturn);
+  setReturnClass(chartBenchmarkReturn, benchmarkReturn);
+  setReturnClass(chartRelativeReturn, relativeReturn);
 }
 
 async function loadMarketChart() {
@@ -1067,6 +1297,22 @@ for (const button of chartPeriodButtons) {
   });
 }
 
+for (const button of chartEventButtons) {
+  button.addEventListener("click", () => {
+    selectedEventFilter = button.dataset.eventFilter;
+
+    for (const eventButton of chartEventButtons) {
+      const isActive = eventButton === button;
+      eventButton.classList.toggle("active", isActive);
+      eventButton.setAttribute("aria-pressed", String(isActive));
+    }
+
+    if (marketChartData) {
+      renderMarketChart();
+    }
+  });
+}
+
 if ("ResizeObserver" in window) {
   new ResizeObserver(() => {
     if (marketChartData) {
@@ -1165,6 +1411,11 @@ async function runResearchRequest(mode) {
     if (!isPreview && data.run_id) {
       loadResearchHistory();
     }
+
+    researchOutput.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   } catch (error) {
     resultTitle.textContent = "Error";
     answer.textContent = error.message;

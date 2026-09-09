@@ -139,7 +139,7 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/retrieval/preview
 # Market context smoke test
 .\.venv\Scripts\python.exe -c "from app.services.market_context import get_market_context, build_market_context_text; data=get_market_context(['NVDA']); print(data[0]['ticker'], data[0]['latest_trading_date'], round(data[0]['returns']['1Y'], 4)); print(build_market_context_text(data).splitlines()[:5])"
 
-# Chart-ready indexed price history for the frontend
+# Chart-ready price history plus earnings/filing events and forward reactions
 Invoke-RestMethod "http://127.0.0.1:8000/api/market/prices?ticker=NVDA&period=1Y"
 
 # Saved research history (full answers are saved after POST /api/research)

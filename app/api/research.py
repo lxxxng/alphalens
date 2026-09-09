@@ -361,10 +361,36 @@ class MarketPriceSeries(BaseModel):
     points: list[MarketPricePoint]
 
 
+class MarketEvent(BaseModel):
+    """One transcript or SEC filing event plotted against market prices."""
+
+    event_id: str
+
+    event_type: str
+
+    ticker: str
+
+    date: str
+
+    plot_date: Optional[str] = None
+
+    label: str
+
+    detail: Optional[str] = None
+
+    source_url: Optional[str] = None
+
+    reaction_1d: Optional[float] = None
+
+    reaction_5d: Optional[float] = None
+
+
 class MarketHistoryResponse(BaseModel):
     """Company and benchmark history returned to the frontend chart."""
 
     ticker: str
+
+    tickers: list[str] = Field(default_factory=list)
 
     benchmark_ticker: str
 
@@ -375,6 +401,8 @@ class MarketHistoryResponse(BaseModel):
     end_date: str
 
     series: list[MarketPriceSeries]
+
+    events: list[MarketEvent] = Field(default_factory=list)
 
 
 class TickerMetadata(BaseModel):
@@ -447,6 +475,13 @@ class FilingTypesResponse(BaseModel):
     """
 
     ticker: Optional[str] = None
+
+    # Explicit comparisons use this list. The singular ticker field remains
+    # accepted for existing API clients and saved evaluation cases.
+    tickers: list[str] = Field(
+        default_factory=list,
+        max_length=4,
+    )
 
     form_types: list[FilingTypeMetadata]
 
@@ -638,21 +673,37 @@ def market_prices(
         default="1Y",
         pattern="^(1M|3M|1Y|5Y)$",
     ),
+    tickers: Optional[str] = Query(
+        default=None,
+        description="Comma-separated additional company tickers.",
+    ),
 ):
     """
-    Return adjusted-close performance for a ticker and SPY.
+    Return adjusted-close performance and dated company events.
 
     Values are indexed to 100 at the start of the requested period so the
-    company and benchmark can share one meaningful chart scale.
+    company and benchmark can share one meaningful chart scale. Transcript
+    calls and SEC filings include forward trading-session reactions.
     """
 
     normalized_ticker = ticker.upper()
+    comparison_tickers = [
+        value.strip().upper()
+        for value in (tickers or "").split(",")
+        if value.strip()
+    ]
 
     try:
         result = get_market_history(
             ticker=normalized_ticker,
             period=period,
+            comparison_tickers=comparison_tickers,
         )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        ) from error
     except Exception as error:
         print(
             f"[API ERROR] "
@@ -743,6 +794,8 @@ def research(
             top_k=request.top_k,
 
             ticker=request.ticker,
+
+            tickers=request.tickers,
 
             form_type=request.form_type,
 
@@ -982,6 +1035,8 @@ def retrieval_preview(
             top_k=request.top_k,
 
             ticker=request.ticker,
+
+            tickers=request.tickers,
 
             form_type=request.form_type,
 

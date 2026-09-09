@@ -315,17 +315,30 @@ def wants_text_evidence(
 def resolve_question_tickers(
     question: str,
     ticker: str | None = None,
+    tickers: list[str] | None = None,
 ) -> list[str]:
     """
     Resolve the ticker filter for one research request.
     """
 
-    if ticker is not None:
+    explicit_tickers = tickers or (
+        [ticker]
+        if ticker is not None
+        else []
+    )
 
-        # Caller-supplied ticker wins over automatic company-name detection.
-        return [
-            ticker.upper()
-        ]
+    if explicit_tickers:
+
+        normalized_tickers = []
+
+        for value in explicit_tickers:
+            normalized = value.strip().upper()
+
+            if normalized and normalized not in normalized_tickers:
+                normalized_tickers.append(normalized)
+
+        # Explicit selections win over automatic company-name detection.
+        return normalized_tickers
 
     return resolve_tickers(
         question
@@ -336,6 +349,7 @@ def collect_evidence(
     question: str,
     top_k: int = DEFAULT_TOP_K,
     ticker: str | None = None,
+    tickers: list[str] | None = None,
     form_type: str | None = None,
     section_key: str | None = None,
     fiscal_period: str | None = None,
@@ -370,6 +384,7 @@ def collect_evidence(
     detected_tickers = resolve_question_tickers(
         question=question,
         ticker=ticker,
+        tickers=tickers,
     )
 
 
@@ -1054,6 +1069,7 @@ def answer_question(
     question: str,
     top_k: int = DEFAULT_TOP_K,
     ticker: str | None = None,
+    tickers: list[str] | None = None,
     form_type: str | None = None,
     section_key: str | None = None,
     fiscal_period: str | None = None,
@@ -1110,6 +1126,7 @@ def answer_question(
         question=question,
         top_k=top_k,
         ticker=ticker,
+        tickers=tickers,
         form_type=form_type,
         section_key=section_key,
         fiscal_period=fiscal_period,
@@ -1168,6 +1185,7 @@ def preview_evidence(
     question: str,
     top_k: int = DEFAULT_TOP_K,
     ticker: str | None = None,
+    tickers: list[str] | None = None,
     form_type: str | None = None,
     section_key: str | None = None,
     fiscal_period: str | None = None,
@@ -1181,6 +1199,7 @@ def preview_evidence(
         question=question,
         top_k=top_k,
         ticker=ticker,
+        tickers=tickers,
         form_type=form_type,
         section_key=section_key,
         fiscal_period=fiscal_period,

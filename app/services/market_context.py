@@ -33,6 +33,7 @@ MARKET_CHART_WINDOWS = {
 }
 
 MAX_MARKET_CHART_POINTS = 420
+MAX_MARKET_COMPARISON_TICKERS = 4
 
 MARKET_QUESTION_TERMS = [
     "stock",
@@ -226,9 +227,166 @@ def build_market_price_series(
     }
 
 
+def calculate_event_reactions(
+    rows: list[dict],
+    event_date,
+) -> dict:
+    """Map an event to prices and calculate forward trading-session returns."""
+
+    baseline_index = None
+
+    for index, row in enumerate(rows):
+        if row["trading_date"] <= event_date:
+            baseline_index = index
+        else:
+            break
+
+    if baseline_index is None:
+        return {
+            "plot_date": None,
+            "reaction_1d": None,
+            "reaction_5d": None,
+        }
+
+    baseline_price = price_value(rows[baseline_index])
+
+    def forward_return(session_count: int) -> float | None:
+        target_index = baseline_index + session_count
+
+        if baseline_price is None or target_index >= len(rows):
+            return None
+
+        target_price = price_value(rows[target_index])
+
+        if target_price is None:
+            return None
+
+        return target_price / baseline_price - 1
+
+    return {
+        "plot_date": str(rows[baseline_index]["trading_date"]),
+        "reaction_1d": forward_return(1),
+        "reaction_5d": forward_return(5),
+    }
+
+
+def fetch_market_events(
+    engine,
+    ticker: str,
+    start_date,
+    end_date,
+    price_rows: list[dict],
+) -> list[dict]:
+    """Load dated transcript and filing events for the market chart."""
+
+    metadata = MetaData()
+    transcripts = Table(
+        "earnings_transcripts",
+        metadata,
+        autoload_with=engine,
+    )
+    filings = Table(
+        "filings",
+        metadata,
+        autoload_with=engine,
+    )
+
+    transcript_query = (
+        select(
+            transcripts.c.transcript_id,
+            transcripts.c.call_date,
+            transcripts.c.fiscal_period,
+            transcripts.c.title,
+            transcripts.c.source_url,
+        )
+        .where(
+            transcripts.c.ticker == ticker.upper(),
+            transcripts.c.call_date.is_not(None),
+            transcripts.c.call_date >= start_date,
+            transcripts.c.call_date <= end_date,
+        )
+        .order_by(transcripts.c.call_date)
+    )
+    filing_query = (
+        select(
+            filings.c.accession_number,
+            filings.c.filing_date,
+            filings.c.form_type,
+            filings.c.report_date,
+            filings.c.source_url,
+        )
+        .where(
+            filings.c.ticker == ticker.upper(),
+            filings.c.filing_date >= start_date,
+            filings.c.filing_date <= end_date,
+        )
+        .order_by(filings.c.filing_date)
+    )
+
+    with engine.connect() as connection:
+        transcript_rows = connection.execute(
+            transcript_query
+        ).mappings().all()
+        filing_rows = connection.execute(
+            filing_query
+        ).mappings().all()
+
+    events = []
+
+    for row in transcript_rows:
+        reactions = calculate_event_reactions(
+            price_rows,
+            row["call_date"],
+        )
+        events.append(
+            {
+                "event_id": f"transcript-{row['transcript_id']}",
+                "event_type": "earnings",
+                "ticker": ticker.upper(),
+                "date": str(row["call_date"]),
+                "label": row["fiscal_period"],
+                "detail": row["title"],
+                "source_url": row["source_url"],
+                **reactions,
+            }
+        )
+
+    for row in filing_rows:
+        reactions = calculate_event_reactions(
+            price_rows,
+            row["filing_date"],
+        )
+        events.append(
+            {
+                "event_id": f"filing-{row['accession_number']}",
+                "event_type": "filing",
+                "ticker": ticker.upper(),
+                "date": str(row["filing_date"]),
+                "label": row["form_type"],
+                "detail": (
+                    f"Period ended {row['report_date']}"
+                    if row["report_date"] is not None
+                    else None
+                ),
+                "source_url": row["source_url"],
+                **reactions,
+            }
+        )
+
+    return sorted(
+        events,
+        key=lambda event: (
+            event["date"],
+            event["event_type"],
+            event["event_id"],
+        ),
+    )
+
+
 def get_market_history(
     ticker: str,
     period: str = "1Y",
+    comparison_tickers: list[str] | None = None,
 ) -> dict | None:
     """
     Return chart-ready company and SPY histories for one trailing period.
@@ -238,6 +396,20 @@ def get_market_history(
     """
 
     normalized_ticker = ticker.upper()
+    selected_tickers = []
+
+    for value in [normalized_ticker, *(comparison_tickers or [])]:
+        normalized = value.strip().upper()
+
+        if normalized and normalized not in selected_tickers:
+            selected_tickers.append(normalized)
+
+    if len(selected_tickers) > MAX_MARKET_COMPARISON_TICKERS:
+        raise ValueError(
+            "Market charts support up to "
+            f"{MAX_MARKET_COMPARISON_TICKERS} company tickers."
+        )
+
     normalized_period = period.upper()
 
     if normalized_period not in MARKET_CHART_WINDOWS:
@@ -258,9 +430,9 @@ def get_market_history(
     start_date = end_date - timedelta(
         days=MARKET_CHART_WINDOWS[normalized_period]
     )
-    requested_tickers = [normalized_ticker]
+    requested_tickers = list(selected_tickers)
 
-    if normalized_ticker != BENCHMARK_TICKER:
+    if BENCHMARK_TICKER not in requested_tickers:
         requested_tickers.append(BENCHMARK_TICKER)
 
     series = []
@@ -290,13 +462,52 @@ def get_market_history(
     if not series:
         return None
 
+    events = []
+
+    for selected_ticker in selected_tickers:
+        selected_rows = (
+            ticker_rows
+            if selected_ticker == normalized_ticker
+            else fetch_price_rows(
+                engine=engine,
+                ticker=selected_ticker,
+            )
+        )
+
+        if not selected_rows:
+            continue
+
+        events.extend(
+            fetch_market_events(
+                engine=engine,
+                ticker=selected_ticker,
+                start_date=start_date,
+                end_date=end_date,
+                price_rows=selected_rows,
+            )
+        )
+
+    events.sort(
+        key=lambda event: (
+            event["date"],
+            event["ticker"],
+            event["event_type"],
+        )
+    )
+
     return {
         "ticker": normalized_ticker,
+        "tickers": [
+            item["ticker"]
+            for item in series
+            if item["ticker"] != BENCHMARK_TICKER
+        ],
         "benchmark_ticker": BENCHMARK_TICKER,
         "period": normalized_period,
         "start_date": series[0]["points"][0]["date"],
         "end_date": series[0]["points"][-1]["date"],
         "series": series,
+        "events": events,
     }
 
 

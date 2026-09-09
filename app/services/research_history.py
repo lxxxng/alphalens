@@ -50,6 +50,7 @@ def collect_result_tickers(
     """Collect unique tickers represented by a saved result."""
 
     candidates = [
+        *request_data.get("tickers", []),
         request_data.get("ticker"),
         *[
             item.get("ticker")
@@ -84,7 +85,12 @@ def save_research_run(
     research_runs = get_research_runs_table(engine)
     market_context = result.get("market_context", [])
     sources = result.get("sources", [])
-    ticker_filter = request_data.get("ticker")
+    explicit_tickers = request_data.get("tickers", [])
+    ticker_filter = (
+        explicit_tickers[0]
+        if explicit_tickers
+        else request_data.get("ticker")
+    )
 
     statement = (
         insert(research_runs)
