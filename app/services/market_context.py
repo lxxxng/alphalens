@@ -501,6 +501,10 @@ def build_ticker_snapshot(
         "latest_adjusted_close": latest_row.get("adjusted_close"),
         "returns": returns,
         "benchmark_ticker": BENCHMARK_TICKER,
+        # Keep the benchmark's absolute return beside the relative spread.
+        # A question such as "NVDA versus SPY" needs all three numbers:
+        # company return, benchmark return, and percentage-point difference.
+        "benchmark_returns": benchmark_returns,
         "benchmark_relative_returns": benchmark_relative_returns,
         "annualized_volatility": calculate_annualized_volatility(
             rows
@@ -604,6 +608,7 @@ def build_market_context_text(
 
     for snapshot in market_context:
         returns = snapshot["returns"]
+        benchmark_returns = snapshot.get("benchmark_returns", {})
         relative = snapshot["benchmark_relative_returns"]
 
         sections.append(
@@ -628,6 +633,13 @@ def build_market_context_text(
                         f"3M {format_percent(returns['3M'])}, "
                         f"1Y {format_percent(returns['1Y'])}, "
                         f"5Y {format_percent(returns['5Y'])}"
+                    ),
+                    (
+                        f"{snapshot['benchmark_ticker']} benchmark returns: "
+                        f"1M {format_percent(benchmark_returns.get('1M'))}, "
+                        f"3M {format_percent(benchmark_returns.get('3M'))}, "
+                        f"1Y {format_percent(benchmark_returns.get('1Y'))}, "
+                        f"5Y {format_percent(benchmark_returns.get('5Y'))}"
                     ),
                     (
                         f"Relative returns vs {snapshot['benchmark_ticker']}: "

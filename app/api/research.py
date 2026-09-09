@@ -328,6 +328,12 @@ class MarketSnapshot(BaseModel):
 
     benchmark_ticker: str
 
+    # Older saved runs predate this field, so history responses default to an
+    # empty mapping while all new market snapshots include benchmark values.
+    benchmark_returns: dict[str, Optional[float]] = Field(
+        default_factory=dict
+    )
+
     benchmark_relative_returns: dict[str, Optional[float]]
 
     annualized_volatility: Optional[float] = None

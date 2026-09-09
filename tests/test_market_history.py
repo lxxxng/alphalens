@@ -4,7 +4,9 @@ import unittest
 from datetime import date, timedelta
 
 from app.services.market_context import (
+    build_market_context_text,
     build_market_price_series,
+    build_ticker_snapshot,
     downsample_rows,
     filter_rows_for_period,
 )
@@ -48,6 +50,26 @@ class MarketHistoryTests(unittest.TestCase):
         self.assertEqual(len(sampled), 5)
         self.assertEqual(sampled[0], rows[0])
         self.assertEqual(sampled[-1], rows[-1])
+
+    def test_snapshot_and_prompt_include_absolute_benchmark_returns(self):
+        benchmark_returns = {
+            "1M": 0.01,
+            "3M": 0.03,
+            "1Y": 0.20,
+            "5Y": 0.50,
+        }
+        snapshot = build_ticker_snapshot(
+            "NVDA",
+            _rows(400),
+            benchmark_returns,
+        )
+
+        self.assertEqual(snapshot["benchmark_returns"], benchmark_returns)
+        self.assertIn(
+            "SPY benchmark returns: 1M 1.00%, 3M 3.00%, "
+            "1Y 20.00%, 5Y 50.00%",
+            build_market_context_text([snapshot]),
+        )
 
 
 if __name__ == "__main__":

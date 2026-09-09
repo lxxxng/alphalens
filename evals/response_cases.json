@@ -1,0 +1,89 @@
+{
+  "name": "alphalens_response_quality_v1",
+  "version": 1,
+  "cases": [
+    {
+      "id": "wmt_latest_margin_answer",
+      "question": "What did Walmart management say about margins on the earnings call?",
+      "request": {
+        "ticker": "WMT",
+        "source_type": "transcripts",
+        "top_k": 3
+      },
+      "expect": {
+        "requires_citations": true,
+        "required_source_types": ["transcript"],
+        "answer_terms_any": ["margin", "profitability"],
+        "should_abstain": false
+      },
+      "rubric": "Answer the margin question directly, attribute comments to Walmart management, and preserve the call's fiscal-period context. Do not blend distinct margin measures without explaining the distinction."
+    },
+    {
+      "id": "nvda_cybersecurity_answer",
+      "question": "What cybersecurity risks does NVIDIA describe in its annual filing?",
+      "request": {
+        "ticker": "NVDA",
+        "source_type": "filings",
+        "form_type": "10-K",
+        "section_key": "item_1a_risk_factors",
+        "top_k": 3
+      },
+      "expect": {
+        "requires_citations": true,
+        "required_source_types": ["filing"],
+        "answer_terms_any": ["cyber", "security"],
+        "should_abstain": false
+      },
+      "rubric": "Summarize only cybersecurity risks supported by NVIDIA's filing excerpts. Separate explicit company disclosures from interpretation and cite each material risk claim."
+    },
+    {
+      "id": "wmt_mixed_margin_answer",
+      "question": "Compare Walmart filings and earnings call comments about margins.",
+      "request": {
+        "ticker": "WMT",
+        "source_type": "both",
+        "top_k": 3
+      },
+      "expect": {
+        "requires_citations": true,
+        "required_source_types": ["filing", "transcript"],
+        "answer_terms_any": ["margin", "profitability"],
+        "should_abstain": false
+      },
+      "rubric": "Use both filings and call evidence. Clearly distinguish the filing disclosures from management's call commentary and avoid implying that different periods or margin measures are directly comparable."
+    },
+    {
+      "id": "nvda_market_vs_spy_answer",
+      "question": "How has NVIDIA stock performed over the last year versus SPY?",
+      "request": {
+        "ticker": "NVDA",
+        "source_type": "auto",
+        "top_k": 3
+      },
+      "expect": {
+        "requires_citations": false,
+        "required_market_tickers": ["NVDA"],
+        "answer_terms_any": ["NVDA", "NVIDIA"],
+        "should_abstain": false
+      },
+      "rubric": "State the one-year measurement window, NVIDIA's return, SPY's return, and benchmark-relative performance from the supplied market snapshot. Do not cite document labels when there are no document sources."
+    },
+    {
+      "id": "unknown_ticker_abstention",
+      "question": "What cybersecurity risks does ZZZZ disclose in its annual filing?",
+      "request": {
+        "ticker": "ZZZZ",
+        "source_type": "filings",
+        "form_type": "10-K",
+        "section_key": "item_1a_risk_factors",
+        "top_k": 3
+      },
+      "expect": {
+        "requires_citations": false,
+        "max_sources": 0,
+        "should_abstain": true
+      },
+      "rubric": "The corpus contains no evidence for this ticker. The answer must plainly say that AlphaLens did not find enough evidence and must not invent company facts or citations."
+    }
+  ]
+}

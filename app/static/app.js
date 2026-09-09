@@ -879,6 +879,7 @@ function renderMarketContext(items) {
     grid.className = "metric-grid";
 
     const returns = item.returns || {};
+    const benchmarkReturns = item.benchmark_returns || {};
     const relative = item.benchmark_relative_returns || {};
 
     grid.append(
@@ -886,6 +887,7 @@ function renderMarketContext(items) {
       metric("1M", formatPercent(returns["1M"])),
       metric("3M", formatPercent(returns["3M"])),
       metric("1Y", formatPercent(returns["1Y"])),
+      metric(`${item.benchmark_ticker} 1Y`, formatPercent(benchmarkReturns["1Y"])),
       metric(`1Y vs ${item.benchmark_ticker}`, formatPercent(relative["1Y"])),
       metric("Volatility", formatPercent(item.annualized_volatility)),
       metric("Avg Volume", formatNumber(item.average_volume_30d, 0)),

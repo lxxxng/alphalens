@@ -522,6 +522,9 @@ Market prices are used as structured SQL context, not vector embeddings.
 When a question asks about stock performance, returns, volatility, volume,
 or SPY-relative performance, AlphaLens calculates a `market_context`
 snapshot from `market_prices` and includes it in the answer prompt.
+The snapshot includes both the company's returns and SPY's absolute returns,
+as well as the percentage-point spread, so comparisons do not require the
+model to derive a missing benchmark value.
 
 Example:
 
@@ -586,6 +589,35 @@ python -m evals.run_retrieval --limit 3 --fail-under 0.8
 
 Add or revise human-approved cases in `evals/retrieval_cases.json` as the
 corpus and expected behavior evolve.
+
+### Response-Quality Evaluations
+
+Run the smaller end-to-end suite after retrieval passes:
+
+```powershell
+python -m evals.run_responses
+```
+
+Each case retrieves evidence once, generates an answer, checks citation labels
+and expected behavior deterministically, then uses a strict structured model
+judge to score groundedness, relevance, completeness, and citation quality from
+1 to 5. Evaluation answers call the generator directly and are not added to
+saved research history. The report is written to
+`data/evals/response_report.json`, and the command exits with code 1 when the
+configured pass-rate gate is missed.
+
+Run one case while developing, or tune the release gate explicitly:
+
+```powershell
+python -m evals.run_responses --case-id wmt_latest_margin_answer
+python -m evals.run_responses --fail-under 0.8 --min-judge-score 4
+```
+
+The five-case suite runs sequentially and normally uses about 14 OpenAI API
+requests: retrieval embeddings, answer generations, and one judge call per
+case. `EVAL_JUDGE_MODEL` can select a judge independently from `RAG_MODEL`.
+Keep the deterministic checks as the hard guardrails and periodically review
+model-judge failures with a human before changing rubrics or thresholds.
 
 ## 11. Stop PostgreSQL
 

@@ -133,7 +133,7 @@ MAX_COMPANIES_PER_QUERY = 4
 #
 # This does NOT mean the model must use all 1,200 tokens.
 # It only sets an upper bound.
-MAX_OUTPUT_TOKENS = 1200
+MAX_OUTPUT_TOKENS = 2400
 
 
 # Default generation model.
@@ -208,6 +208,11 @@ Rules:
 
 15. For market data, state the measurement window and distinguish raw
     returns from benchmark-relative returns.
+
+16. State the relevant fiscal period for earnings-call evidence, or the
+    filing date and form type for SEC evidence, so the reader can tell which
+    reporting period the answer summarizes. When several periods are used,
+    make that explicit instead of implying they are one period.
 """.strip()
 
 
@@ -955,7 +960,27 @@ def generate_grounded_answer(
         input=prompt,
 
         max_output_tokens=MAX_OUTPUT_TOKENS,
+
+        # GPT-5 reasoning tokens count toward max_output_tokens. Low effort and
+        # low verbosity leave room for a complete, concise cited answer.
+        reasoning={"effort": "low"},
+
+        text={"verbosity": "low"},
     )
+
+
+    if response.status == "incomplete":
+
+        reason = getattr(
+            response.incomplete_details,
+            "reason",
+            "unknown",
+        )
+
+        raise RuntimeError(
+            "OpenAI returned an incomplete answer "
+            f"(reason: {reason})."
+        )
 
 
     # response.output_text provides the combined generated

@@ -148,6 +148,13 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/research/history?limit=20"
 # Retrieval regression suite (embeddings only; no generated answers)
 python -m evals.run_retrieval
 
+# End-to-end answer-quality suite (generation plus structured model judge)
+# Run after retrieval passes; results go to data/evals/response_report.json
+python -m evals.run_responses
+
+# Fast response-eval iteration on one golden question
+python -m evals.run_responses --case-id wmt_latest_margin_answer
+
 # Download, parsing, and embedding status
 docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT download_status, parse_status, COUNT(*) FROM filings GROUP BY download_status, parse_status; SELECT embedding_status, COUNT(*) FROM filing_chunks GROUP BY embedding_status;"
 
