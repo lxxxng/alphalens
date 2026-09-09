@@ -15,6 +15,8 @@ const tickerSelect = document.querySelector("#ticker");
 const fiscalPeriodSelect = document.querySelector("#fiscal-period");
 const formTypeSelect = document.querySelector("#form-type");
 const sectionKeySelect = document.querySelector("#section-key");
+const openAIHealthButton = document.querySelector("#openai-health");
+const openAIHealthLabel = document.querySelector("#openai-health-label");
 
 // A few grounded examples make the UI useful immediately after startup.
 // They also double as quick manual smoke tests for each retrieval mode.
@@ -53,6 +55,42 @@ function setStatus(label, state = "") {
 function setBusy(isBusy) {
   submitButton.disabled = isBusy;
   previewButton.disabled = isBusy;
+}
+
+function renderOpenAIHealth(data) {
+  const status = data.status || "error";
+  const labels = {
+    ok: "OpenAI: Connected",
+    not_configured: "OpenAI: Not configured",
+    error: "OpenAI: Unavailable",
+  };
+
+  openAIHealthButton.className = `connection-status ${status}`;
+  openAIHealthLabel.textContent = labels[status] || labels.error;
+
+  const latency = data.latency_ms !== undefined
+    ? ` (${data.latency_ms} ms)`
+    : "";
+  openAIHealthButton.title = `${data.message || "Connection check failed."}${latency}`;
+}
+
+async function checkOpenAIHealth() {
+  openAIHealthButton.disabled = true;
+  openAIHealthButton.className = "connection-status checking";
+  openAIHealthLabel.textContent = "OpenAI: Checking";
+
+  try {
+    const response = await fetch("/api/health/openai");
+    const data = await response.json();
+    renderOpenAIHealth(data);
+  } catch (error) {
+    renderOpenAIHealth({
+      status: "error",
+      message: "The AlphaLens API could not run the connection check.",
+    });
+  } finally {
+    openAIHealthButton.disabled = false;
+  }
 }
 
 function sourceLabel(source) {
@@ -551,7 +589,13 @@ copyButton.addEventListener("click", async () => {
   }
 });
 
+// Metadata and provider health are independent startup checks. Running both
+// immediately makes the console ready sooner and keeps one failure from
+// hiding the other.
 initializeMetadata();
+checkOpenAIHealth();
+
+openAIHealthButton.addEventListener("click", checkOpenAIHealth);
 
 async function runResearchRequest(mode) {
   const payload = payloadFromForm(

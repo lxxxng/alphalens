@@ -483,6 +483,17 @@ GET /api/metadata/filing-sections?ticker=NVDA&form_type=10-K
 
 These routes read the local database and do not call OpenAI.
 
+Check whether the configured API key can authenticate with OpenAI:
+
+```text
+GET /api/health/openai
+```
+
+The check lists available models, so it does not generate an answer or use
+generation tokens. The response distinguishes a missing key, rejected key,
+rate limit, timeout, and network connection failure. The research console
+also shows this status beside the API Docs link; click it to rerun the check.
+
 Preview retrieval without generating an answer:
 
 ```json

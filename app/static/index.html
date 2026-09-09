@@ -16,7 +16,19 @@
             <p class="eyebrow">AlphaLens</p>
             <h1 id="app-title">Research Console</h1>
           </div>
-          <a class="docs-link" href="/docs">API Docs</a>
+          <div class="brand-actions">
+            <button
+              id="openai-health"
+              class="connection-status checking"
+              type="button"
+              title="Check OpenAI connection"
+              aria-live="polite"
+            >
+              <span class="connection-dot" aria-hidden="true"></span>
+              <span id="openai-health-label">OpenAI: Checking</span>
+            </button>
+            <a class="docs-link" href="/docs">API Docs</a>
+          </div>
         </div>
 
         <form id="research-form" class="research-form">

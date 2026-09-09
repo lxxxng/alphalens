@@ -129,6 +129,9 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/transcript-periods?ticker=
 Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/filing-types?ticker=NVDA"
 Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/filing-sections?ticker=NVDA&form_type=10-K"
 
+# OpenAI key and connection check (does not generate an answer)
+Invoke-RestMethod "http://127.0.0.1:8000/api/health/openai"
+
 # Evidence preview smoke test, retrieval only and no generated answer
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/retrieval/preview" -ContentType "application/json" -Body '{"question":"How has NVIDIA stock performed over the last year versus SPY?","ticker":"NVDA","source_type":"auto","top_k":3}'
 

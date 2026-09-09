@@ -88,6 +88,70 @@ textarea {
   gap: 16px;
 }
 
+.brand-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.connection-status {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fbfcfa;
+  color: var(--muted);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.connection-status:hover {
+  border-color: var(--accent);
+}
+
+.connection-status:disabled {
+  cursor: wait;
+}
+
+.connection-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.connection-status.ok {
+  color: var(--accent-strong);
+}
+
+.connection-status.ok .connection-dot {
+  background: var(--accent);
+}
+
+.connection-status.not_configured,
+.connection-status.checking {
+  color: var(--amber);
+}
+
+.connection-status.not_configured .connection-dot,
+.connection-status.checking .connection-dot {
+  background: var(--amber);
+}
+
+.connection-status.error {
+  color: var(--danger);
+}
+
+.connection-status.error .connection-dot {
+  background: var(--danger);
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: var(--accent);
@@ -528,6 +592,15 @@ select:focus {
 }
 
 @media (max-width: 560px) {
+  .brand-row {
+    align-items: flex-start;
+  }
+
+  .brand-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .control-grid,
   .source-picker,
   .form-actions {

@@ -108,6 +108,10 @@ from app.services.metadata import (
     get_transcript_periods,
 )
 
+from app.services.openai_health import (
+    check_openai_connection,
+)
+
 
 # ============================================================
 # Router
@@ -452,6 +456,46 @@ class EvidencePreviewResponse(BaseModel):
     )
 
     sources: list[ResearchSource]
+
+
+class OpenAIHealthResponse(BaseModel):
+    """
+    Connection status returned by GET /api/health/openai.
+    """
+
+    status: str
+
+    configured: bool
+
+    reachable: bool
+
+    latency_ms: float
+
+    message: str
+
+    error_type: Optional[str] = None
+
+
+# ============================================================
+# GET /api/health/openai
+# ============================================================
+
+@router.get(
+    "/health/openai",
+    response_model=OpenAIHealthResponse,
+    summary="Check the OpenAI API connection",
+)
+def openai_health():
+    """
+    Verify that the configured API key can reach OpenAI.
+
+    This calls the Models endpoint and does not generate an answer or expose
+    the key. The response remains HTTP 200 so the frontend can display the
+    exact diagnostic state without treating expected configuration problems
+    as a broken AlphaLens API request.
+    """
+
+    return check_openai_connection()
 
 
 # ============================================================
