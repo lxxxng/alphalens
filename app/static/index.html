@@ -6,8 +6,8 @@
     <title>AlphaLens Research</title>
     <!-- Version static assets so a long-running local browser cannot combine
          new markup with a stale stylesheet or script. -->
-    <link rel="stylesheet" href="/static/styles.css?v=20260909.3">
-    <link rel="stylesheet" href="/static/navigation.css?v=20260909.3">
+    <link rel="stylesheet" href="/static/styles.css?v=20260910.2">
+    <link rel="stylesheet" href="/static/navigation.css?v=20260910.2">
   </head>
   <body>
     <header class="app-header">
@@ -63,16 +63,26 @@
           >What did Walmart management say about margins on the earnings call?</textarea>
 
           <div class="control-grid">
-            <label class="control">
+            <div class="control ticker-control">
               <span>Ticker</span>
-              <select
-                id="ticker"
-                name="ticker"
-              >
-                <option value="WMT">WMT</option>
-                <option value="NVDA">NVDA</option>
-              </select>
-            </label>
+              <div id="ticker-picker" class="ticker-picker">
+                <button
+                  id="ticker-picker-button"
+                  class="ticker-picker-button"
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                >
+                  <span id="ticker-picker-label">WMT</span>
+                  <span class="ticker-picker-symbol" aria-hidden="true">+</span>
+                </button>
+                <div id="ticker-menu" class="ticker-menu" hidden>
+                  <div id="ticker-options" class="ticker-options" role="listbox" aria-multiselectable="true"></div>
+                  <p>Choose up to four companies</p>
+                </div>
+              </div>
+              <div id="ticker-chips" class="ticker-chips" aria-label="Selected tickers"></div>
+            </div>
 
             <label class="control">
               <span>Fiscal Period</span>
@@ -193,7 +203,7 @@
           </div>
           <div class="chart-kpis" aria-label="Market performance summary">
             <div>
-              <span>Company return</span>
+              <span id="chart-company-label">Company return</span>
               <strong id="chart-company-return">--</strong>
             </div>
             <div>
@@ -256,6 +266,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260909.3"></script>
+    <script src="/static/app.js?v=20260910.2"></script>
   </body>
 </html>

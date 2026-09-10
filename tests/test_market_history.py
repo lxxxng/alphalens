@@ -2,7 +2,11 @@
 
 import unittest
 from datetime import date, timedelta
+from unittest.mock import patch
 
+from fastapi.testclient import TestClient
+
+from app.main import app
 from app.services.market_context import (
     build_market_context_text,
     build_market_price_series,
@@ -26,6 +30,50 @@ def _rows(count: int) -> list[dict]:
 
 
 class MarketHistoryTests(unittest.TestCase):
+    def test_market_api_parses_comparison_tickers(self):
+        market_result = {
+            "ticker": "WMT",
+            "tickers": ["WMT", "NVDA"],
+            "benchmark_ticker": "SPY",
+            "period": "1Y",
+            "start_date": "2025-01-01",
+            "end_date": "2026-01-01",
+            "series": [
+                {
+                    "ticker": ticker,
+                    "points": [
+                        {
+                            "date": "2025-01-01",
+                            "close": 100.0,
+                            "indexed_value": 100.0,
+                        }
+                    ],
+                }
+                for ticker in ["WMT", "NVDA", "SPY"]
+            ],
+            "events": [],
+        }
+
+        with patch(
+            "app.api.research.get_market_history",
+            return_value=market_result,
+        ) as market_history:
+            response = TestClient(app).get(
+                "/api/market/prices",
+                params={
+                    "ticker": "WMT",
+                    "tickers": "NVDA,COST",
+                    "period": "1Y",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        market_history.assert_called_once_with(
+            ticker="WMT",
+            period="1Y",
+            comparison_tickers=["NVDA", "COST"],
+        )
+
     def test_series_uses_adjusted_close_and_indexes_from_100(self):
         series = build_market_price_series("WMT", _rows(3))
 

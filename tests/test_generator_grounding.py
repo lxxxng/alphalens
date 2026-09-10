@@ -1,11 +1,52 @@
 """Tests for deterministic answer finalization after model generation."""
 
 import unittest
+from unittest.mock import patch
 
-from app.rag.generator import finalize_grounded_answer
+from app.rag.generator import (
+    collect_evidence,
+    finalize_grounded_answer,
+    resolve_question_tickers,
+)
 
 
 class GeneratorGroundingTests(unittest.TestCase):
+    def test_explicit_ticker_list_is_normalized_and_deduplicated(self):
+        with patch("app.rag.generator.resolve_tickers") as resolver:
+            tickers = resolve_question_tickers(
+                "Compare Walmart and NVIDIA",
+                ticker="AAPL",
+                tickers=["wmt", "NVDA", "WMT"],
+            )
+
+        self.assertEqual(tickers, ["WMT", "NVDA"])
+        resolver.assert_not_called()
+
+    def test_singular_ticker_remains_backward_compatible(self):
+        tickers = resolve_question_tickers(
+            "What did management say?",
+            ticker="wmt",
+        )
+
+        self.assertEqual(tickers, ["WMT"])
+
+    def test_multi_ticker_evidence_is_retrieved_as_one_balanced_request(self):
+        with patch(
+            "app.rag.generator.retrieve_evidence",
+            return_value=[],
+        ) as retrieve:
+            collect_evidence(
+                question="Compare Walmart and NVIDIA margins",
+                tickers=["WMT", "NVDA"],
+                source_type="transcripts",
+                top_k=3,
+            )
+
+        self.assertEqual(
+            retrieve.call_args.kwargs["tickers"],
+            ["WMT", "NVDA"],
+        )
+
     def test_market_only_answer_cannot_keep_document_citation(self):
         answer = finalize_grounded_answer(
             "NVDA returned 17.29% versus SPY [S1].",

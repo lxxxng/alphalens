@@ -11,7 +11,12 @@ const submitButton = document.querySelector("#submit-button");
 const previewButton = document.querySelector("#preview-button");
 const copyButton = document.querySelector("#copy-button");
 const sampleButton = document.querySelector("#sample-button");
-const tickerSelect = document.querySelector("#ticker");
+const tickerPicker = document.querySelector("#ticker-picker");
+const tickerPickerButton = document.querySelector("#ticker-picker-button");
+const tickerPickerLabel = document.querySelector("#ticker-picker-label");
+const tickerMenu = document.querySelector("#ticker-menu");
+const tickerOptions = document.querySelector("#ticker-options");
+const tickerChips = document.querySelector("#ticker-chips");
 const fiscalPeriodSelect = document.querySelector("#fiscal-period");
 const formTypeSelect = document.querySelector("#form-type");
 const sectionKeySelect = document.querySelector("#section-key");
@@ -27,6 +32,7 @@ const chartDateRange = document.querySelector("#chart-date-range");
 const chartLegend = document.querySelector("#chart-legend");
 const chartPeriodButtons = document.querySelectorAll("[data-period]");
 const chartEventButtons = document.querySelectorAll("[data-event-filter]");
+const chartCompanyLabel = document.querySelector("#chart-company-label");
 const chartCompanyReturn = document.querySelector("#chart-company-return");
 const chartBenchmarkLabel = document.querySelector("#chart-benchmark-label");
 const chartBenchmarkReturn = document.querySelector("#chart-benchmark-return");
@@ -57,25 +63,48 @@ const samples = [
     source_type: "auto",
   },
   {
-    question: "Compare Walmart filings and earnings call comments about margins.",
+    question: "Compare Walmart and Costco margin commentary across filings and earnings calls.",
     ticker: "WMT",
+    tickers: ["WMT", "COST"],
     source_type: "both",
   },
 ];
 
 let sampleIndex = 0;
 let metadataReady = false;
+// Selection order is intentional: the first ticker drives metadata filters
+// and headline KPIs while every selected ticker participates in comparison.
+let availableTickers = [];
+let selectedTickers = (
+  new URLSearchParams(window.location.search)
+    .get("tickers")
+    ?.split(",")
+    .map((ticker) => ticker.trim().toUpperCase())
+    .filter(Boolean)
+    .slice(0, 4)
+) || ["WMT"];
 let selectedChartPeriod = "1Y";
 let selectedEventFilter = "all";
 let marketChartData = null;
 let marketChartRequest = 0;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-const CHART_COLORS = ["#087f5b", "#d97706"];
+const COMPANY_CHART_COLORS = ["#087f5b", "#6d4aff", "#0f8ea8", "#c24156"];
+const BENCHMARK_CHART_COLOR = "#d97706";
 const EVENT_COLORS = {
   earnings: "#7c3aed",
   filing: "#2563eb",
 };
+
+function chartColor(ticker, fallbackIndex = 0) {
+  if (ticker === marketChartData?.benchmark_ticker) {
+    return BENCHMARK_CHART_COLOR;
+  }
+
+  const companyIndex = (marketChartData?.tickers || []).indexOf(ticker);
+  const colorIndex = companyIndex >= 0 ? companyIndex : fallbackIndex;
+  return COMPANY_CHART_COLORS[colorIndex % COMPANY_CHART_COLORS.length];
+}
 
 function setStatus(label, state = "") {
   statusPill.textContent = label;
@@ -247,8 +276,16 @@ async function restoreSavedFilters(run) {
   form.elements.top_k.value = run.top_k;
   setSourceType(run.source_type);
 
-  const ticker = run.ticker_filter || run.tickers?.[0] || "";
-  setSelectValue(tickerSelect, ticker);
+  const restoredTickers = (run.tickers || [])
+    .filter((ticker) => ticker !== "SPY")
+    .slice(0, 4);
+  const tickers = restoredTickers.length
+    ? restoredTickers
+    : [run.ticker_filter].filter(Boolean);
+  selectedTickers = tickers;
+  syncTickerUrl();
+  renderTickerPicker();
+  const ticker = primaryTicker();
 
   if (metadataReady) {
     await loadFiltersForTicker(ticker);
@@ -365,6 +402,97 @@ function setSelectValue(select, value) {
   }
 }
 
+function primaryTicker() {
+  return selectedTickers[0] || "";
+}
+
+function setTickerMenuOpen(isOpen) {
+  tickerMenu.hidden = !isOpen;
+  tickerPickerButton.setAttribute("aria-expanded", String(isOpen));
+}
+
+function syncTickerUrl() {
+  const url = new URL(window.location.href);
+
+  if (selectedTickers.length) {
+    url.searchParams.set("tickers", selectedTickers.join(","));
+  } else {
+    url.searchParams.delete("tickers");
+  }
+
+  window.history.replaceState({}, "", url);
+}
+
+async function applyTickerSelection(values) {
+  selectedTickers = [...new Set(
+    values
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean)
+  )].slice(0, 4);
+  syncTickerUrl();
+  renderTickerPicker();
+
+  if (metadataReady) {
+    await loadFiltersForTicker(primaryTicker());
+    await loadMarketChart();
+  }
+}
+
+function renderTickerPicker() {
+  tickerPickerLabel.textContent = selectedTickers.length
+    ? selectedTickers.join(", ")
+    : "Auto-detect from question";
+  tickerChips.replaceChildren();
+  tickerOptions.replaceChildren();
+
+  for (const ticker of selectedTickers) {
+    const chip = document.createElement("span");
+    chip.className = "ticker-chip";
+    const label = document.createElement("strong");
+    label.textContent = ticker;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "x";
+    remove.title = `Remove ${ticker}`;
+    remove.setAttribute("aria-label", `Remove ${ticker}`);
+    remove.addEventListener("click", async () => {
+      await applyTickerSelection(
+        selectedTickers.filter((value) => value !== ticker)
+      );
+    });
+    chip.append(label, remove);
+    tickerChips.appendChild(chip);
+  }
+
+  for (const item of availableTickers) {
+    const option = document.createElement("label");
+    option.className = "ticker-option";
+    option.setAttribute("role", "option");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = item.ticker;
+    input.checked = selectedTickers.includes(item.ticker);
+    input.disabled = !input.checked && selectedTickers.length >= 4;
+    option.setAttribute("aria-selected", String(input.checked));
+
+    const identity = document.createElement("span");
+    const ticker = document.createElement("strong");
+    ticker.textContent = item.ticker;
+    const company = document.createElement("small");
+    company.textContent = item.company_name || item.ticker;
+    identity.append(ticker, company);
+
+    input.addEventListener("change", async () => {
+      const next = input.checked
+        ? [...selectedTickers, item.ticker]
+        : selectedTickers.filter((value) => value !== item.ticker);
+      await applyTickerSelection(next);
+    });
+    option.append(input, identity);
+    tickerOptions.appendChild(option);
+  }
+}
+
 function selectedSourceType() {
   return formDataSourceType(
     new FormData(form)
@@ -396,35 +524,21 @@ async function fetchJson(url) {
 }
 
 async function loadTickers() {
-  const previousValue = tickerSelect.value || "WMT";
   const data = await fetchJson("/api/metadata/tickers");
+  availableTickers = data.tickers || [];
+  const availableSymbols = new Set(
+    availableTickers.map((item) => item.ticker)
+  );
+  selectedTickers = selectedTickers.filter(
+    (ticker) => availableSymbols.has(ticker)
+  );
 
-  clearOptions(tickerSelect, "Any ticker");
-
-  for (const item of data.tickers || []) {
-    const badges = [
-      item.filing_count ? "filings" : null,
-      item.transcript_count ? "calls" : null,
-      item.market_price_count ? "prices" : null,
-    ].filter(Boolean).join(", ");
-
-    const label = [
-      item.ticker,
-      item.company_name,
-      badges ? `(${badges})` : null,
-    ].filter(Boolean).join(" - ");
-
-    appendOption(
-      tickerSelect,
-      item.ticker,
-      label
-    );
+  if (!selectedTickers.length && availableSymbols.has("WMT")) {
+    selectedTickers = ["WMT"];
   }
 
-  setSelectValue(
-    tickerSelect,
-    previousValue
-  );
+  syncTickerUrl();
+  renderTickerPicker();
 }
 
 async function loadTranscriptPeriods(ticker) {
@@ -536,7 +650,7 @@ async function loadFiltersForTicker(ticker) {
 async function initializeMetadata() {
   try {
     await loadTickers();
-    await loadFiltersForTicker(tickerSelect.value);
+    await loadFiltersForTicker(primaryTicker());
     metadataReady = true;
   } catch (error) {
     // If metadata cannot load, the hard-coded fallback options still let
@@ -640,10 +754,13 @@ function renderChartLegend(series, events) {
   series.forEach((item, index) => {
     const legendItem = document.createElement("span");
     const swatch = document.createElement("i");
-    swatch.style.backgroundColor = CHART_COLORS[index];
+    swatch.style.backgroundColor = chartColor(item.ticker, index);
 
     const label = document.createElement("strong");
-    label.textContent = item.ticker;
+    const first = item.points[0];
+    const last = item.points.at(-1);
+    const periodReturn = last.indexed_value / first.indexed_value - 1;
+    label.textContent = `${item.ticker} ${formatReturn(periodReturn)}`;
 
     legendItem.append(swatch, label);
     chartLegend.appendChild(legendItem);
@@ -688,7 +805,7 @@ function renderChartTooltip(date, rows, left, top) {
   rows.forEach((row, index) => {
     const item = document.createElement("span");
     const swatch = document.createElement("i");
-    swatch.style.backgroundColor = CHART_COLORS[index];
+    swatch.style.backgroundColor = chartColor(row.ticker, index);
     item.append(
       swatch,
       `${row.ticker} ${formatReturn((row.point.indexed_value - 100) / 100)} · $${formatNumber(row.point.close)}`
@@ -703,7 +820,7 @@ function renderChartTooltip(date, rows, left, top) {
 
 function renderEventTooltip(event, left, top) {
   const title = document.createElement("strong");
-  title.textContent = `${event.event_type === "earnings" ? "Earnings" : "SEC filing"} · ${event.label}`;
+  title.textContent = `${event.ticker} · ${event.event_type === "earnings" ? "Earnings" : "SEC filing"} · ${event.label}`;
   const date = document.createElement("span");
   date.textContent = formatChartDate(event.date);
   const nextSession = document.createElement("span");
@@ -743,7 +860,7 @@ function renderMarketEvents(events) {
 
     const description = document.createElement("span");
     const title = document.createElement("strong");
-    title.textContent = event.label;
+    title.textContent = `${event.ticker} · ${event.label}`;
     const date = document.createElement("small");
     date.textContent = formatChartDate(event.date);
     description.append(title, date);
@@ -866,7 +983,7 @@ function renderMarketChart() {
     priceChartSvg.appendChild(svgElement("path", {
       d: chartLinePath(item.points, xScale, yScale),
       class: "chart-line",
-      stroke: CHART_COLORS[index],
+      stroke: chartColor(item.ticker, index),
     }));
   });
 
@@ -930,8 +1047,11 @@ function renderMarketChart() {
   const eventStacks = new Map();
 
   for (const event of events) {
+    const eventSeries = marketChartData.series.find(
+      (series) => series.ticker === event.ticker
+    ) || marketChartData.series[0];
     const point = closestChartPoint(
-      primaryPoints,
+      eventSeries.points,
       Date.parse(`${event.plot_date}T00:00:00Z`)
     );
     const lineX = xScale(event.plot_date);
@@ -959,14 +1079,16 @@ function renderMarketChart() {
     const marker = svgElement("g", {
       class: `event-marker ${event.event_type}`,
       role: "img",
-      "aria-label": `${event.label} on ${event.date}`,
+      "aria-label": `${event.ticker} ${event.label} on ${event.date}`,
     });
-    marker.appendChild(svgElement("circle", {
+    const markerCircle = svgElement("circle", {
       cx: lineX,
       cy: markerY,
       r: 10,
       fill: EVENT_COLORS[event.event_type],
-    }));
+    });
+    markerCircle.style.stroke = chartColor(event.ticker);
+    marker.appendChild(markerCircle);
     const glyph = svgElement("text", {
       x: lineX,
       y: markerY + 3.5,
@@ -1010,10 +1132,11 @@ function updateChartSummary(data) {
     ? periodReturn - benchmarkReturn
     : null;
 
-  chartTicker.textContent = data.ticker;
-  chartPeriodReturn.textContent = `${formatPercent(periodReturn)} over ${data.period}`;
+  chartTicker.textContent = (data.tickers || [data.ticker]).join(" / ");
+  chartPeriodReturn.textContent = `${data.ticker} ${formatPercent(periodReturn)} over ${data.period}`;
   chartPeriodReturn.className = periodReturn >= 0 ? "positive" : "negative";
   chartDateRange.textContent = `${formatChartDate(data.start_date)} - ${formatChartDate(data.end_date)}`;
+  chartCompanyLabel.textContent = `${data.ticker} return`;
   chartCompanyReturn.textContent = formatReturn(periodReturn);
   chartBenchmarkLabel.textContent = `${data.benchmark_ticker} return`;
   chartBenchmarkReturn.textContent = formatReturn(benchmarkReturn);
@@ -1024,7 +1147,7 @@ function updateChartSummary(data) {
 }
 
 async function loadMarketChart() {
-  const ticker = tickerSelect.value;
+  const ticker = primaryTicker();
   const requestId = ++marketChartRequest;
 
   if (!ticker) {
@@ -1033,7 +1156,7 @@ async function loadMarketChart() {
     return;
   }
 
-  chartTicker.textContent = ticker;
+  chartTicker.textContent = selectedTickers.join(" / ");
   chartPeriodReturn.className = "";
   chartPeriodReturn.textContent = "Loading prices...";
   chartDateRange.textContent = "";
@@ -1044,6 +1167,10 @@ async function loadMarketChart() {
       ticker,
       period: selectedChartPeriod,
     });
+
+    if (selectedTickers.length > 1) {
+      params.set("tickers", selectedTickers.slice(1).join(","));
+    }
     const response = await fetch(`/api/market/prices?${params}`);
     const data = await response.json();
 
@@ -1206,7 +1333,6 @@ function payloadFromForm(formData) {
     top_k: Number(formData.get("top_k") || 5),
   };
 
-  const ticker = (formData.get("ticker") || "").trim().toUpperCase();
   const fiscalPeriod = (
     formData.get("fiscal_period") || ""
   ).trim().toUpperCase();
@@ -1217,8 +1343,8 @@ function payloadFromForm(formData) {
     formData.get("section_key") || ""
   ).trim();
 
-  if (ticker) {
-    payload.ticker = ticker;
+  if (selectedTickers.length) {
+    payload.tickers = [...selectedTickers];
   }
 
   if (fiscalPeriod) {
@@ -1251,11 +1377,13 @@ sampleButton.addEventListener("click", async () => {
   sampleIndex += 1;
 
   form.elements.question.value = sample.question;
-  form.elements.ticker.value = sample.ticker;
+  selectedTickers = sample.tickers || [sample.ticker];
+  syncTickerUrl();
+  renderTickerPicker();
   setSourceType(sample.source_type);
 
   if (metadataReady) {
-    await loadFiltersForTicker(sample.ticker);
+    await loadFiltersForTicker(primaryTicker());
   }
 
   form.elements.fiscal_period.value = sample.fiscal_period || "";
@@ -1263,7 +1391,7 @@ sampleButton.addEventListener("click", async () => {
 
   if (metadataReady) {
     await loadFilingSections(
-      sample.ticker,
+      primaryTicker(),
       form.elements.form_type.value
     );
   }
@@ -1273,11 +1401,21 @@ sampleButton.addEventListener("click", async () => {
   await loadMarketChart();
 });
 
-tickerSelect.addEventListener("change", async () => {
-  await loadFiltersForTicker(
-    tickerSelect.value
-  );
-  await loadMarketChart();
+tickerPickerButton.addEventListener("click", () => {
+  setTickerMenuOpen(tickerMenu.hidden);
+});
+
+document.addEventListener("click", (event) => {
+  if (!tickerPicker.contains(event.target)) {
+    setTickerMenuOpen(false);
+  }
+});
+
+tickerPicker.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    setTickerMenuOpen(false);
+    tickerPickerButton.focus();
+  }
 });
 
 for (const button of chartPeriodButtons) {
@@ -1323,7 +1461,7 @@ if ("ResizeObserver" in window) {
 
 formTypeSelect.addEventListener("change", async () => {
   await loadFilingSections(
-    tickerSelect.value,
+    primaryTicker(),
     formTypeSelect.value
   );
 });
@@ -1350,6 +1488,7 @@ copyButton.addEventListener("click", async () => {
 // Metadata and provider health are independent startup checks. Running both
 // immediately makes the console ready sooner and keeps one failure from
 // hiding the other.
+renderTickerPicker();
 initializeMetadata();
 checkOpenAIHealth();
 loadResearchHistory();

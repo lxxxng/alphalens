@@ -12,7 +12,10 @@ from app.services.research_history import collect_result_tickers
 class ResearchHistoryTests(unittest.TestCase):
     def test_result_tickers_are_normalized_and_deduplicated(self):
         tickers = collect_result_tickers(
-            request_data={"ticker": "wmt"},
+            request_data={
+                "ticker": "wmt",
+                "tickers": ["nvda", "WMT"],
+            },
             result={
                 "market_context": [{"ticker": "WMT"}],
                 "sources": [
@@ -22,7 +25,7 @@ class ResearchHistoryTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(tickers, ["WMT", "SPY"])
+        self.assertEqual(tickers, ["NVDA", "WMT", "SPY"])
 
     def test_successful_research_response_includes_saved_run_id(self):
         generated = {
@@ -36,7 +39,7 @@ class ResearchHistoryTests(unittest.TestCase):
             patch(
                 "app.api.research.answer_question",
                 return_value=generated.copy(),
-            ),
+            ) as answer_question,
             patch(
                 "app.api.research.save_research_run",
                 return_value=42,
@@ -47,6 +50,7 @@ class ResearchHistoryTests(unittest.TestCase):
                 json={
                     "question": "How are margins changing?",
                     "ticker": "WMT",
+                    "tickers": ["WMT", "NVDA"],
                     "source_type": "transcripts",
                     "top_k": 3,
                 },
@@ -54,6 +58,21 @@ class ResearchHistoryTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["run_id"], 42)
+        self.assertEqual(
+            answer_question.call_args.kwargs["tickers"],
+            ["WMT", "NVDA"],
+        )
+
+    def test_research_request_rejects_more_than_four_tickers(self):
+        response = TestClient(app).post(
+            "/api/research",
+            json={
+                "question": "Compare these companies",
+                "tickers": ["AAPL", "MSFT", "NVDA", "WMT", "COST"],
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
 
     def test_history_detail_returns_not_found(self):
         with patch(

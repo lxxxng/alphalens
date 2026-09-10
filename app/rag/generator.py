@@ -1134,6 +1134,7 @@ def answer_question(
     )
 
     question = evidence["question"]
+    detected_tickers = evidence["detected_tickers"]
     market_context = evidence["market_context"]
     retrieved_results = evidence["retrieved_results"]
 
@@ -1169,6 +1170,9 @@ def answer_question(
 
         "question":
             question,
+
+        "tickers":
+            detected_tickers,
 
         "answer":
             answer,
@@ -1209,6 +1213,9 @@ def preview_evidence(
     return {
         "question":
             evidence["question"],
+
+        "tickers":
+            evidence["detected_tickers"],
 
         "market_context":
             evidence["market_context"],

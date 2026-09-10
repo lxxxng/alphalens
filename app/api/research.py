@@ -236,6 +236,13 @@ class ResearchRequest(BaseModel):
     #
     ticker: Optional[str] = None
 
+    # Explicit comparisons use this list. The singular ticker field remains
+    # accepted for existing API clients and saved evaluation cases.
+    tickers: list[str] = Field(
+        default_factory=list,
+        max_length=4,
+    )
+
     form_type: Optional[str] = None
 
     section_key: Optional[str] = None
@@ -476,13 +483,6 @@ class FilingTypesResponse(BaseModel):
 
     ticker: Optional[str] = None
 
-    # Explicit comparisons use this list. The singular ticker field remains
-    # accepted for existing API clients and saved evaluation cases.
-    tickers: list[str] = Field(
-        default_factory=list,
-        max_length=4,
-    )
-
     form_types: list[FilingTypeMetadata]
 
 
@@ -520,6 +520,8 @@ class ResearchResponse(BaseModel):
     """
 
     question: str
+
+    tickers: list[str] = Field(default_factory=list)
 
     run_id: Optional[int] = None
 
@@ -606,6 +608,8 @@ class EvidencePreviewResponse(BaseModel):
     """
 
     question: str
+
+    tickers: list[str] = Field(default_factory=list)
 
     market_context: list[MarketSnapshot] = Field(
         default_factory=list

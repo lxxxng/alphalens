@@ -314,7 +314,7 @@ select:focus {
 
 .control-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) 72px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -324,7 +324,166 @@ select:focus {
   gap: 6px;
 }
 
-.control.wide { grid-column: span 2; }
+.control.wide { grid-column: auto; }
+
+.ticker-control { grid-column: 1 / -1; }
+
+/* The picker stays compact in the research rail while its menu can expose
+   company names and the four-company selection limit. */
+.ticker-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.ticker-picker-button {
+  display: flex;
+  width: 100%;
+  height: 38px;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ticker-picker-button:hover,
+.ticker-picker-button[aria-expanded="true"] {
+  border-color: var(--green);
+}
+
+#ticker-picker-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticker-picker-symbol {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--green-soft);
+  color: var(--green-deep);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ticker-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 5px);
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 14px 34px rgba(13, 25, 22, 0.16);
+}
+
+.ticker-menu[hidden] { display: none; }
+
+.ticker-options {
+  display: grid;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.ticker-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  border-bottom: 1px solid #e7ebe9;
+  padding: 9px 11px;
+  cursor: pointer;
+}
+
+.ticker-option:hover { background: var(--surface-soft); }
+
+.ticker-option:has(input:checked) { background: #edf6f2; }
+
+.ticker-option:has(input:disabled) {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.ticker-option input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--green);
+}
+
+.ticker-option strong,
+.ticker-option small { display: block; }
+
+.ticker-option strong { font-size: 11px; }
+
+.ticker-option small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticker-menu > p {
+  margin: 0;
+  background: #f0f3f1;
+  color: var(--muted);
+  padding: 8px 11px;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.ticker-chips {
+  display: flex;
+  min-height: 0;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ticker-chips:empty { display: none; }
+
+.ticker-chip {
+  display: inline-flex;
+  min-height: 25px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #c9ddd6;
+  border-radius: 4px;
+  background: var(--green-soft);
+  color: var(--green-deep);
+  padding: 0 4px 0 7px;
+  font-size: 10px;
+}
+
+.ticker-chip button {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--green-deep);
+  padding: 0;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ticker-chip button:hover { background: #c9e2d9; }
 
 /* Native radios provide keyboard behavior; the labels create a compact
    segmented source selector without duplicating state in JavaScript. */
