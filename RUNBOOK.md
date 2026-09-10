@@ -68,6 +68,8 @@ Get-Content -Raw db\sql\006_filing_chunks.sql | docker exec -i alphalens-postgre
 Get-Content -Raw db\sql\007_chunk_embeddings.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\008_earnings_transcripts.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\009_research_runs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
+Get-Content -Raw db\sql\010_transcript_sentiment.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
+Get-Content -Raw db\sql\011_filing_sentiment.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 ```
 
 ## 6. Run all pipelines in order
@@ -120,6 +122,17 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 
 # Transcript RAG retrieval smoke test
 .\.venv\Scripts\python.exe -c "from app.rag.retriever import semantic_search; results=semantic_search('What did Walmart management say about margins on the earnings call?', top_k=3, ticker='WMT', corpus='transcripts'); print([(r['source_type'], r['ticker'], r['fiscal_period'], r['chunk_id'], round(r['score'], 4)) for r in results])"
+
+# Versioned FinBERT sentiment (install requirements-ml.txt once)
+.\.venv\Scripts\python.exe -m pipelines.transcripts.sentiment --tickers WMT --limit 10
+
+# SEC narrative sentiment targets MD&A, Risk Factors, and Market Risk
+.\.venv\Scripts\python.exe -m pipelines.sec.sentiment --tickers WMT --limit 10
+
+# Coverage-aware sentiment API smoke tests
+Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/transcripts?ticker=WMT"
+Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/transcripts/287"
+Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/filings/0000104169-21-000058"
 
 # Local research UI
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000

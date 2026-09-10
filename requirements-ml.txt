@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# Kept separate so ordinary API/unit-test setup does not download large model
+# runtimes. Install this file on sentiment workers and development machines.
+torch==2.14.0
+transformers==5.17.0

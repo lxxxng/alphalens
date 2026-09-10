@@ -67,6 +67,8 @@ Get-Content db\sql\006_filing_chunks.sql | docker exec -i alphalens-postgres psq
 Get-Content db\sql\007_chunk_embeddings.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\008_earnings_transcripts.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\009_research_runs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\010_transcript_sentiment.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\011_filing_sentiment.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -437,6 +439,58 @@ SELECT
 FROM earnings_transcript_chunks
 GROUP BY embedding_status
 ORDER BY embedding_status;
+```
+
+### Score Transcript Sentiment
+
+The sentiment worker uses the public `ProsusAI/finbert` financial-text model.
+Its heavier runtime is isolated from the ordinary API dependencies:
+
+```powershell
+pip install -r requirements-ml.txt
+
+# Download the pinned model and score a small, resumable sample.
+python -m pipelines.transcripts.sentiment --tickers WMT --limit 10
+
+# Continue through every pending turn in the corpus.
+python -m pipelines.transcripts.sentiment
+```
+
+Operator-only turns are recorded as `SKIPPED` by default. Every scored turn
+stores its label, polarity score, confidence, three-class probabilities,
+token/segment counts, and model version in
+`earnings_transcript_turn_sentiment`. The latest label and polarity score are
+also copied onto `earnings_transcript_turns` for lightweight API reads.
+Rerunning the command processes only missing turns. Use `--retry-failed` to
+retry model failures or `--include-operators` to score operator speech.
+
+```sql
+SELECT
+    status,
+    sentiment_label,
+    COUNT(*)
+FROM earnings_transcript_turn_sentiment
+GROUP BY status, sentiment_label
+ORDER BY status, sentiment_label;
+```
+
+SEC sentiment uses the same pinned model but targets only MD&A, Risk Factors,
+and Market Risk chunks. Financial-statement tables are excluded because their
+language polarity is not a reliable analytical signal.
+
+```powershell
+# Small SEC integration run, followed by the resumable full backfill.
+python -m pipelines.sec.sentiment --tickers WMT --limit 10
+python -m pipelines.sec.sentiment
+```
+
+Coverage-aware read APIs expose transcript speaker-group trends and filing
+section summaries even while a backfill is still running:
+
+```text
+GET /api/sentiment/transcripts?ticker=WMT
+GET /api/sentiment/transcripts/287
+GET /api/sentiment/filings/0000104169-21-000058
 ```
 
 ### Ask RAG Questions Over Transcripts
