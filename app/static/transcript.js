@@ -7,6 +7,7 @@ const transcriptSearch = document.querySelector("#transcript-search");
 const turnCount = document.querySelector("#turn-count");
 const copyButton = document.querySelector("#copy-transcript");
 const researchLink = document.querySelector("#research-link");
+const { fiscalPeriod: formatFiscalPeriod } = window.AlphaLensFormatters;
 
 let transcript = null;
 
@@ -107,17 +108,18 @@ function renderTurns(query = "") {
 
 function renderTranscript(data) {
   transcript = data;
+  const fiscalPeriod = formatFiscalPeriod(data.fiscal_period);
   transcriptTitle.textContent = data.title || `${data.ticker} Earnings Call`;
-  transcriptSubtitle.textContent = `${data.ticker} | ${data.fiscal_period} | ${formatDate(data.call_date)}`;
+  transcriptSubtitle.textContent = `${data.ticker} | ${fiscalPeriod} | ${formatDate(data.call_date)}`;
   transcriptFacts.replaceChildren(
     fact("Ticker", data.ticker),
-    fact("Fiscal period", data.fiscal_period),
+    fact("Fiscal period", fiscalPeriod),
     fact("Call date", formatDate(data.call_date)),
     fact("Provider", data.source_provider.replaceAll("_", " "))
   );
   researchLink.href = `/?tickers=${encodeURIComponent(data.ticker)}`;
   researchLink.textContent = `Research ${data.ticker}`;
-  document.title = `${data.ticker} ${data.fiscal_period} | AlphaLens`;
+  document.title = `${data.ticker} ${fiscalPeriod} | AlphaLens`;
   copyButton.disabled = false;
   renderTurns();
 }

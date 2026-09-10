@@ -507,6 +507,8 @@ reader at `/transcripts/{transcript_id}`. The reader uses the transcript and
 ordered speaker turns already stored in PostgreSQL, so the browser never
 opens the provider's authenticated API URL and does not need an
 `EARNINGSCALLS_API_KEY`. That key is required only when ingesting new calls.
+Stored fiscal-period keys remain compact values such as `2026Q2` for stable
+filtering, while the UI displays them as `FY2026 Q2` beside the calendar date.
 
 Ticker Auto mode is enabled by default. As the question changes, matching
 company names and ticker symbols become selected chips and update the market

@@ -44,6 +44,7 @@ const marketEvents = document.querySelector("#market-events");
 const researchOutput = document.querySelector(".research-output");
 const historyList = document.querySelector("#history-list");
 const historyRefreshButton = document.querySelector("#history-refresh");
+const { fiscalPeriod: formatFiscalPeriod } = window.AlphaLensFormatters;
 
 // A few grounded examples make the UI useful immediately after startup.
 // They also double as quick manual smoke tests for each retrieval mode.
@@ -349,7 +350,7 @@ function sourceLabel(source) {
   if (source.source_type === "transcript") {
     return [
       source.ticker,
-      source.fiscal_period,
+      formatFiscalPeriod(source.fiscal_period),
       source.call_date,
     ].filter(Boolean).join(" | ");
   }
@@ -624,7 +625,7 @@ async function loadTranscriptPeriods(ticker) {
 
   for (const item of data.periods || []) {
     const label = [
-      item.fiscal_period,
+      formatFiscalPeriod(item.fiscal_period),
       item.call_date,
     ].filter(Boolean).join(" - ");
 
@@ -889,9 +890,18 @@ function renderChartTooltip(date, rows, left, top) {
   chartTooltip.style.top = `${top}px`;
 }
 
+function eventDisplayLabel(event) {
+  return event.event_type === "earnings"
+    ? formatFiscalPeriod(event.label)
+    : event.label;
+}
+
 function renderEventTooltip(event, left, top) {
   const title = document.createElement("strong");
-  title.textContent = `${event.ticker} · ${event.event_type === "earnings" ? "Earnings" : "SEC filing"} · ${event.label}`;
+  const eventType = event.event_type === "earnings"
+    ? "Earnings"
+    : "SEC filing";
+  title.textContent = `${event.ticker} · ${eventType} · ${eventDisplayLabel(event)}`;
   const date = document.createElement("span");
   date.textContent = formatChartDate(event.date);
   const nextSession = document.createElement("span");
@@ -931,7 +941,7 @@ function renderMarketEvents(events) {
 
     const description = document.createElement("span");
     const title = document.createElement("strong");
-    title.textContent = `${event.ticker} · ${event.label}`;
+    title.textContent = `${event.ticker} · ${eventDisplayLabel(event)}`;
     const date = document.createElement("small");
     date.textContent = formatChartDate(event.date);
     description.append(title, date);
@@ -1150,7 +1160,7 @@ function renderMarketChart() {
     const marker = svgElement("g", {
       class: `event-marker ${event.event_type}`,
       role: event.source_url ? "link" : "img",
-      "aria-label": `${event.ticker} ${event.label} on ${event.date}`,
+      "aria-label": `${event.ticker} ${eventDisplayLabel(event)} on ${event.date}`,
     });
 
     if (event.source_url) {
