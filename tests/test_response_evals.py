@@ -4,16 +4,86 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from evals.run_responses import (
     build_report,
     citation_labels,
     grade_deterministic,
     load_suite,
+    run_case,
 )
 
 
 class ResponseEvalTests(unittest.TestCase):
+    def test_runner_forwards_explicit_ticker_list(self):
+        case = {
+            "id": "multi_ticker_answer",
+            "question": "Compare Walmart and Costco",
+            "request": {"tickers": ["WMT", "COST"]},
+            "expect": {"answer_terms_any": ["comparison"]},
+            "rubric": "Answer the comparison.",
+        }
+        evidence = {
+            "question": case["question"],
+            "market_context": [],
+            "retrieved_results": [],
+        }
+        judgment = {
+            "scores": {
+                "groundedness": 5,
+                "relevance": 5,
+                "completeness": 5,
+                "citation_quality": 5,
+            },
+            "overall_pass": True,
+            "reasoning": "Pass.",
+            "unsupported_claims": [],
+        }
+
+        with (
+            patch(
+                "evals.run_responses.collect_evidence",
+                return_value=evidence,
+            ) as collect,
+            patch(
+                "evals.run_responses.generate_grounded_answer",
+                return_value="Comparison complete.",
+            ),
+        ):
+            result = run_case(
+                case,
+                judge=lambda *_: judgment,
+            )
+
+        self.assertTrue(result["passed"])
+        self.assertEqual(
+            collect.call_args.kwargs["tickers"],
+            ["WMT", "COST"],
+        )
+
+    def test_multi_company_grader_requires_citations_from_each_ticker(self):
+        case = {
+            "expect": {
+                "required_source_tickers": ["WMT", "COST"],
+                "required_cited_source_tickers": ["WMT", "COST"],
+                "answer_terms_all": ["WMT", "COST"],
+            }
+        }
+        sources = [
+            {"source": "S1", "source_type": "transcript", "ticker": "WMT"},
+            {"source": "S2", "source_type": "transcript", "ticker": "COST"},
+        ]
+
+        checks = grade_deterministic(
+            case,
+            "WMT discussed mix [S1]. COST discussed membership [S2].",
+            sources,
+            [],
+        )
+
+        self.assertTrue(all(check["passed"] for check in checks))
+
     def test_citation_labels_are_unique_and_ordered(self):
         self.assertEqual(
             citation_labels("Claim [S2]. More [S1], repeated [S2]."),

@@ -1,6 +1,6 @@
 {
-  "name": "alphalens_response_quality_v1",
-  "version": 1,
+  "name": "alphalens_response_quality_v2",
+  "version": 2,
   "cases": [
     {
       "id": "wmt_latest_margin_answer",
@@ -67,6 +67,77 @@
         "should_abstain": false
       },
       "rubric": "State the one-year measurement window, NVIDIA's return, SPY's return, and benchmark-relative performance from the supplied market snapshot. Do not cite document labels when there are no document sources."
+    },
+    {
+      "id": "wmt_cost_latest_margin_comparison_answer",
+      "question": "Compare Walmart and Costco margin commentary on their latest earnings calls.",
+      "request": {
+        "source_type": "transcripts",
+        "top_k": 3
+      },
+      "expect": {
+        "requires_citations": true,
+        "required_source_types": ["transcript"],
+        "required_source_tickers": ["WMT", "COST"],
+        "required_cited_source_tickers": ["WMT", "COST"],
+        "answer_terms_all": ["Walmart", "Costco"],
+        "answer_terms_any": ["margin", "profitability"],
+        "should_abstain": false
+      },
+      "rubric": "Cover Walmart and Costco separately before drawing a comparison. Attribute every margin claim to the correct company, cite evidence from both companies, and identify the latest fiscal period used for each company. Do not treat different margin definitions as directly equivalent."
+    },
+    {
+      "id": "nvda_msft_ai_risk_comparison_answer",
+      "question": "Compare AI-related risks disclosed by NVIDIA and Microsoft in their annual filings.",
+      "request": {
+        "source_type": "filings",
+        "form_type": "10-K",
+        "section_key": "item_1a_risk_factors",
+        "top_k": 3
+      },
+      "expect": {
+        "requires_citations": true,
+        "required_source_types": ["filing"],
+        "required_source_tickers": ["NVDA", "MSFT"],
+        "required_cited_source_tickers": ["NVDA", "MSFT"],
+        "answer_terms_all": ["NVIDIA", "Microsoft"],
+        "answer_terms_any": ["AI", "artificial intelligence"],
+        "should_abstain": false
+      },
+      "rubric": "Identify material AI-related risks for NVIDIA and Microsoft separately, then compare them. Every company-specific statement must be supported by that company's filing citation; do not transfer a disclosure from one company to the other."
+    },
+    {
+      "id": "wmt_cost_market_comparison_answer",
+      "question": "Compare Walmart and Costco stock performance over the last year versus SPY.",
+      "request": {
+        "source_type": "auto",
+        "top_k": 3
+      },
+      "expect": {
+        "requires_citations": false,
+        "required_market_tickers": ["WMT", "COST"],
+        "answer_terms_all": ["WMT", "COST", "SPY"],
+        "should_abstain": false
+      },
+      "rubric": "State the one-year measurement window, WMT's return, COST's return, SPY's return, and each company's percentage-point performance versus SPY. Draw only comparisons supported by the structured market snapshots and do not use document citations."
+    },
+    {
+      "id": "wmt_cost_nvda_outlook_comparison_answer",
+      "question": "Compare Walmart, Costco, and NVIDIA management outlook on their latest earnings calls.",
+      "request": {
+        "source_type": "transcripts",
+        "top_k": 2
+      },
+      "expect": {
+        "requires_citations": true,
+        "required_source_types": ["transcript"],
+        "required_source_tickers": ["WMT", "COST", "NVDA"],
+        "required_cited_source_tickers": ["WMT", "COST", "NVDA"],
+        "answer_terms_all": ["Walmart", "Costco", "NVIDIA"],
+        "answer_terms_any": ["outlook", "guidance"],
+        "should_abstain": false
+      },
+      "rubric": "Give distinct, concise outlook sections for Walmart, Costco, and NVIDIA. Cite evidence from every company, preserve each latest call's fiscal-period context, and avoid forcing a comparison where the retrieved management comments discuss different outlook measures."
     },
     {
       "id": "unknown_ticker_abstention",

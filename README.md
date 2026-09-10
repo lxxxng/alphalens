@@ -602,9 +602,10 @@ python -m evals.run_retrieval
 ```
 
 The suite checks ticker detection, source routing, source counts and types,
-fiscal-period and filing filters, market context, and required evidence
-terms. Text retrieval cases create one query embedding per searched corpus,
-but the answer-generation model is never called. Results are written to
+per-company evidence coverage, fiscal-period and filing filters, market
+context, required evidence terms, and the four-company limit. Text retrieval
+cases create one query embedding per company/corpus pair, but the
+answer-generation model is never called. Results are written to
 `data/evals/retrieval_report.json`; the command exits with code 1 if any case
 fails, making it suitable for CI.
 
@@ -629,8 +630,10 @@ python -m evals.run_responses
 Each case retrieves evidence once, generates an answer, checks citation labels
 and expected behavior deterministically, then uses a strict structured model
 judge to score groundedness, relevance, completeness, and citation quality from
-1 to 5. Evaluation answers call the generator directly and are not added to
-saved research history. The report is written to
+1 to 5. Multi-company cases also require evidence and cited sources from every
+requested ticker, with the judge checking company attribution. Evaluation
+answers call the generator directly and are not added to saved research history.
+The report is written to
 `data/evals/response_report.json`, and the command exits with code 1 when the
 configured pass-rate gate is missed.
 
@@ -638,10 +641,11 @@ Run one case while developing, or tune the release gate explicitly:
 
 ```powershell
 python -m evals.run_responses --case-id wmt_latest_margin_answer
+python -m evals.run_responses --case-id wmt_cost_latest_margin_comparison_answer
 python -m evals.run_responses --fail-under 0.8 --min-judge-score 4
 ```
 
-The five-case suite runs sequentially and normally uses about 14 OpenAI API
+The nine-case suite runs sequentially and normally uses about 29 OpenAI API
 requests: retrieval embeddings, answer generations, and one judge call per
 case. `EVAL_JUDGE_MODEL` can select a judge independently from `RAG_MODEL`.
 Keep the deterministic checks as the hard guardrails and periodically review

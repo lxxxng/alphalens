@@ -130,7 +130,6 @@ def should_prefer_latest_transcript(
         "trend",
         "trends",
         "all calls",
-        "calls",
         "previous calls",
         "past calls",
     ]
@@ -148,6 +147,14 @@ def should_prefer_latest_transcript(
         "this quarter",
     ]
 
+    # Explicit recency wins for plural comparison wording such as "their
+    # latest earnings calls". A bare plural still means search across calls.
+    if any(term in lower_question for term in latest_terms):
+        return True
+
+    if "calls" in lower_question:
+        return False
+
     singular_call_terms = [
         "the earnings call",
         "the call",
@@ -158,7 +165,7 @@ def should_prefer_latest_transcript(
 
     return any(
         term in lower_question
-        for term in latest_terms + singular_call_terms
+        for term in singular_call_terms
     )
 
 

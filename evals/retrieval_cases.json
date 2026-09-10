@@ -1,6 +1,6 @@
 {
-  "name": "alphalens_retrieval_v1",
-  "version": 1,
+  "name": "alphalens_retrieval_v2",
+  "version": 2,
   "cases": [
     {
       "id": "wmt_latest_margin_call",
@@ -179,6 +179,93 @@
         "max_sources": 0,
         "min_market_snapshots": 1,
         "market_tickers": ["WMT"]
+      }
+    },
+    {
+      "id": "wmt_cost_latest_margin_comparison",
+      "question": "Compare Walmart and Costco margin commentary on their latest earnings calls.",
+      "request": {
+        "source_type": "transcripts",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["WMT", "COST"],
+        "routed_source_types": ["transcripts"],
+        "text_search_enabled": true,
+        "min_sources": 6,
+        "max_sources": 6,
+        "required_source_types": ["transcript"],
+        "required_source_tickers": ["WMT", "COST"],
+        "allowed_fiscal_periods": ["2026Q3", "2026Q4"],
+        "content_terms_any": ["margin", "profitability"]
+      }
+    },
+    {
+      "id": "nvda_msft_ai_risk_comparison",
+      "question": "Compare AI-related risks disclosed by NVIDIA and Microsoft in their annual filings.",
+      "request": {
+        "source_type": "filings",
+        "form_type": "10-K",
+        "section_key": "item_1a_risk_factors",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["NVDA", "MSFT"],
+        "routed_source_types": ["filings"],
+        "text_search_enabled": true,
+        "min_sources": 6,
+        "max_sources": 6,
+        "required_source_types": ["filing"],
+        "required_source_tickers": ["NVDA", "MSFT"],
+        "allowed_form_types": ["10-K"],
+        "required_section_keys": ["item_1a_risk_factors"],
+        "content_terms_any": ["artificial intelligence", "AI", "competition"]
+      }
+    },
+    {
+      "id": "wmt_cost_market_comparison",
+      "question": "Compare Walmart and Costco stock performance over the last year versus SPY.",
+      "request": {
+        "source_type": "auto",
+        "top_k": 3
+      },
+      "expect": {
+        "detected_tickers": ["WMT", "COST"],
+        "routed_source_types": ["filings", "transcripts"],
+        "text_search_enabled": false,
+        "max_sources": 0,
+        "min_market_snapshots": 2,
+        "market_tickers": ["WMT", "COST"]
+      }
+    },
+    {
+      "id": "wmt_cost_nvda_latest_outlook",
+      "question": "Compare Walmart, Costco, and NVIDIA management outlook on their latest earnings calls.",
+      "request": {
+        "source_type": "transcripts",
+        "top_k": 2
+      },
+      "expect": {
+        "detected_tickers": ["WMT", "COST", "NVDA"],
+        "routed_source_types": ["transcripts"],
+        "text_search_enabled": true,
+        "min_sources": 6,
+        "max_sources": 6,
+        "required_source_types": ["transcript"],
+        "required_source_tickers": ["WMT", "COST", "NVDA"],
+        "allowed_fiscal_periods": ["2026Q3", "2026Q4"],
+        "content_terms_any": ["outlook", "guidance", "revenue"]
+      }
+    },
+    {
+      "id": "five_company_comparison_limit",
+      "question": "Compare Apple, Microsoft, NVIDIA, Amazon, and Walmart earnings commentary.",
+      "request": {
+        "source_type": "transcripts",
+        "top_k": 2
+      },
+      "expect": {
+        "expected_error_contains": "up to 4 companies"
       }
     }
   ]

@@ -39,8 +39,11 @@ CITATION_PATTERN = re.compile(r"\[S(\d+)\]")
 
 SUPPORTED_EXPECTATIONS = {
     "answer_terms_any",
+    "answer_terms_all",
     "max_sources",
+    "required_cited_source_tickers",
     "required_market_tickers",
+    "required_source_tickers",
     "required_source_types",
     "requires_citations",
     "should_abstain",
@@ -108,6 +111,10 @@ Score each dimension from 1 (poor) to 5 (excellent):
 - citation_quality: document claims use the right [S#] labels; give 5 when
   citations are correctly unnecessary because only structured market data is
   used or the answer appropriately abstains
+
+For multi-company comparisons, completeness requires material coverage of
+every requested company. Groundedness and citation quality require claims to
+be attributed to, and cited from, the correct company.
 
 Set overall_pass to true only when there are no material unsupported claims,
 the answer follows the rubric, and every score is at least 4. Concision and
@@ -226,6 +233,38 @@ def grade_deterministic(
             actual=actual,
         )
 
+    if "required_source_tickers" in expected:
+        required = expected["required_source_tickers"]
+        actual = sorted({source["ticker"] for source in sources})
+        add_check(
+            checks,
+            name="required_source_tickers",
+            passed=set(required).issubset(actual),
+            expected=required,
+            actual=actual,
+        )
+
+    if "required_cited_source_tickers" in expected:
+        required = expected["required_cited_source_tickers"]
+        sources_by_label = {
+            source["source"]: source
+            for source in sources
+        }
+        actual = sorted(
+            {
+                sources_by_label[label]["ticker"]
+                for label in labels
+                if label in sources_by_label
+            }
+        )
+        add_check(
+            checks,
+            name="required_cited_source_tickers",
+            passed=set(required).issubset(actual),
+            expected=required,
+            actual=actual,
+        )
+
     if "required_market_tickers" in expected:
         required = expected["required_market_tickers"]
         actual = [snapshot["ticker"] for snapshot in market_context]
@@ -245,6 +284,18 @@ def grade_deterministic(
             checks,
             name="answer_terms_any",
             passed=bool(matches),
+            expected=terms,
+            actual=matches,
+        )
+
+    if "answer_terms_all" in expected:
+        terms = [term.lower() for term in expected["answer_terms_all"]]
+        lower_answer = answer.lower()
+        matches = [term for term in terms if term in lower_answer]
+        add_check(
+            checks,
+            name="answer_terms_all",
+            passed=len(matches) == len(terms),
             expected=terms,
             actual=matches,
         )
@@ -373,6 +424,7 @@ def run_case(
             question=case["question"],
             top_k=request.get("top_k", 5),
             ticker=request.get("ticker"),
+            tickers=request.get("tickers"),
             form_type=request.get("form_type"),
             section_key=request.get("section_key"),
             fiscal_period=request.get("fiscal_period"),

@@ -33,11 +33,13 @@ SUPPORTED_EXPECTATIONS = {
     "allowed_form_types",
     "content_terms_any",
     "detected_tickers",
+    "expected_error_contains",
     "market_tickers",
     "max_sources",
     "min_market_snapshots",
     "min_sources",
     "required_section_keys",
+    "required_source_tickers",
     "required_source_types",
     "routed_source_types",
     "text_search_enabled",
@@ -187,6 +189,23 @@ def grade_retrieval_case(
         }
     )
 
+    if "required_source_tickers" in expected:
+        required = expected["required_source_tickers"]
+        actual = sorted(
+            {
+                source.get("ticker")
+                for source in sources
+                if source.get("ticker")
+            }
+        )
+        add_check(
+            checks,
+            name="required_source_tickers",
+            passed=set(required).issubset(actual),
+            expected=required,
+            actual=actual,
+        )
+
     if "required_source_types" in expected:
         required = expected["required_source_types"]
         add_check(
@@ -327,12 +346,16 @@ def run_case(case: dict) -> dict:
         question=question,
         source_type=source_type,
     )
+    expected_error = case.get("expect", {}).get(
+        "expected_error_contains"
+    )
 
     try:
         evidence = collect_evidence(
             question=question,
             top_k=request.get("top_k", 5),
             ticker=request.get("ticker"),
+            tickers=request.get("tickers"),
             form_type=request.get("form_type"),
             section_key=request.get("section_key"),
             fiscal_period=request.get("fiscal_period"),
@@ -344,6 +367,14 @@ def run_case(case: dict) -> dict:
             routed_source_types=routed_source_types,
             text_search_enabled=text_search_enabled,
         )
+        if expected_error:
+            add_check(
+                checks,
+                name="expected_error_contains",
+                passed=False,
+                expected=expected_error,
+                actual="no error",
+            )
         error = None
     except Exception as exception:
         evidence = {
@@ -351,14 +382,27 @@ def run_case(case: dict) -> dict:
             "market_context": [],
             "retrieved_results": [],
         }
-        checks = [
-            {
-                "name": "execution",
-                "passed": False,
-                "expected": "successful retrieval",
-                "actual": type(exception).__name__,
-            }
-        ]
+        checks = []
+
+        if expected_error:
+            add_check(
+                checks,
+                name="expected_error_contains",
+                passed=(
+                    expected_error.lower()
+                    in str(exception).lower()
+                ),
+                expected=expected_error,
+                actual=str(exception),
+            )
+        else:
+            add_check(
+                checks,
+                name="execution",
+                passed=False,
+                expected="successful retrieval",
+                actual=type(exception).__name__,
+            )
         error = str(exception)
 
     return {
@@ -451,7 +495,7 @@ def print_result(result: dict) -> None:
             f"got {check['actual']!r}"
         )
 
-    if result["error"]:
+    if result["error"] and not result["passed"]:
         print(f"  - error: {result['error']}")
 
 

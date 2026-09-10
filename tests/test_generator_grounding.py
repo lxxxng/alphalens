@@ -9,9 +9,24 @@ from app.rag.generator import (
     resolve_question_tickers,
 )
 from app.rag.company_resolver import resolve_tickers
+from app.rag.retrievers.router import should_prefer_latest_transcript
 
 
 class GeneratorGroundingTests(unittest.TestCase):
+    def test_latest_plural_calls_prefer_each_company_latest_period(self):
+        self.assertTrue(
+            should_prefer_latest_transcript(
+                "Compare Walmart and Costco on their latest earnings calls."
+            )
+        )
+
+    def test_historical_calls_do_not_force_latest_period(self):
+        self.assertFalse(
+            should_prefer_latest_transcript(
+                "Compare Walmart margin trends over time across calls."
+            )
+        )
+
     def test_automatic_tickers_follow_question_mention_order(self):
         companies = [
             {"ticker": "WMT", "company_name": "Walmart Inc."},
