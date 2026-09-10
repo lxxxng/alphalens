@@ -497,9 +497,16 @@ GET /api/metadata/resolve-tickers?question=Compare%20Walmart%20and%20Costco
 GET /api/metadata/transcript-periods?ticker=WMT
 GET /api/metadata/filing-types?ticker=NVDA
 GET /api/metadata/filing-sections?ticker=NVDA&form_type=10-K
+GET /api/transcripts/269
 ```
 
 These routes read the local database and do not call OpenAI.
+
+Earnings events and transcript citations open AlphaLens's local transcript
+reader at `/transcripts/{transcript_id}`. The reader uses the transcript and
+ordered speaker turns already stored in PostgreSQL, so the browser never
+opens the provider's authenticated API URL and does not need an
+`EARNINGSCALLS_API_KEY`. That key is required only when ingesting new calls.
 
 Ticker Auto mode is enabled by default. As the question changes, matching
 company names and ticker symbols become selected chips and update the market
@@ -568,9 +575,10 @@ companies and SPY. Every series is indexed to 100 at the start of the selected
 1M, 3M, 1Y, or 5Y period; the chart presents that index as cumulative return
 from 0% so the left axis cannot be mistaken for a share price. The same API
 response includes dated earnings-call and SEC filing events for each company.
-Event reactions
-compare adjusted close on the event date (or the preceding trading session)
-with the next and fifth subsequent trading sessions.
+Click an E marker to open the local transcript reader, or an F marker to open
+the public SEC filing. Event reactions compare adjusted close on the event
+date (or the preceding trading session) with the next and fifth subsequent
+trading sessions.
 
 ```text
 GET /api/market/prices?ticker=NVDA&period=1Y

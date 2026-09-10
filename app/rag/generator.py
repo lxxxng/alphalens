@@ -100,6 +100,7 @@ from app.services.market_context import (
     get_market_context,
     wants_market_context,
 )
+from app.services.transcripts import transcript_viewer_url
 
 
 # ============================================================
@@ -889,10 +890,16 @@ def build_source_records(
                         "title"
                     ),
 
-                "source_url":
-                    result.get(
-                        "source_url"
-                    ),
+                # Transcript providers may expose authenticated API URLs.
+                # Citations should open the copy already stored in AlphaLens.
+                "source_url": (
+                    transcript_viewer_url(result["transcript_id"])
+                    if (
+                        result.get("source_type") == "transcript"
+                        and result.get("transcript_id") is not None
+                    )
+                    else result.get("source_url")
+                ),
 
                 "speaker_names":
                     result.get(

@@ -127,6 +127,8 @@ from app.services.research_history import (
     save_research_run,
 )
 
+from app.services.transcripts import get_transcript_detail
+
 
 # ============================================================
 # Router
@@ -476,6 +478,50 @@ class TranscriptPeriodsResponse(BaseModel):
     ticker: str
 
     periods: list[TranscriptPeriodMetadata]
+
+
+class TranscriptTurnResponse(BaseModel):
+    """One ordered speaker contribution in a stored earnings call."""
+
+    turn_index: int
+
+    speaker_name: Optional[str] = None
+
+    speaker_title: Optional[str] = None
+
+    speaker_role: Optional[str] = None
+
+    content: str
+
+    sentiment_label: Optional[str] = None
+
+    sentiment_score: Optional[float] = None
+
+
+class TranscriptDetailResponse(BaseModel):
+    """A locally stored earnings transcript and its speaker turns."""
+
+    transcript_id: int
+
+    ticker: str
+
+    fiscal_year: int
+
+    fiscal_quarter: int
+
+    fiscal_period: str
+
+    call_date: Optional[str] = None
+
+    title: Optional[str] = None
+
+    source_provider: str
+
+    char_count: int
+
+    turn_count: int
+
+    turns: list[TranscriptTurnResponse]
 
 
 class FilingTypeMetadata(BaseModel):
@@ -1095,6 +1141,36 @@ def retrieval_preview(
 # ============================================================
 # Metadata Endpoints
 # ============================================================
+
+@router.get(
+    "/transcripts/{transcript_id}",
+    response_model=TranscriptDetailResponse,
+    summary="Read a stored earnings transcript",
+)
+def transcript_detail(transcript_id: int):
+    """Return local transcript text without calling the source provider."""
+
+    try:
+        transcript = get_transcript_detail(transcript_id)
+    except Exception as error:
+        print(
+            f"[API ERROR] "
+            f"/api/transcripts/{transcript_id}: "
+            f"{error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not load this transcript.",
+        ) from error
+
+    if transcript is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Transcript not found.",
+        )
+
+    return transcript
 
 @router.get(
     "/metadata/tickers",

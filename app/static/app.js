@@ -1149,9 +1149,14 @@ function renderMarketChart() {
 
     const marker = svgElement("g", {
       class: `event-marker ${event.event_type}`,
-      role: "img",
+      role: event.source_url ? "link" : "img",
       "aria-label": `${event.ticker} ${event.label} on ${event.date}`,
     });
+
+    if (event.source_url) {
+      marker.classList.add("linked");
+      marker.setAttribute("tabindex", "0");
+    }
     const markerCircle = svgElement("circle", {
       cx: lineX,
       cy: markerY,
@@ -1180,6 +1185,23 @@ function renderMarketChart() {
     marker.addEventListener("pointerleave", () => {
       chartTooltip.hidden = true;
     });
+
+    // Event markers are real navigation controls, not just chart decoration.
+    // Earnings open the local reader; filing events retain their SEC links.
+    if (event.source_url) {
+      const openEvent = () => {
+        window.open(event.source_url, "_blank", "noopener,noreferrer");
+      };
+
+      marker.addEventListener("click", openEvent);
+      marker.addEventListener("keydown", (keyboardEvent) => {
+        if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+          keyboardEvent.preventDefault();
+          openEvent();
+        }
+      });
+    }
+
     priceChartSvg.appendChild(marker);
   }
 

@@ -992,6 +992,12 @@ select:focus {
 
 .event-marker { cursor: help; }
 
+.event-marker.linked { cursor: pointer; }
+
+.event-marker.linked:focus-visible circle {
+  stroke-width: 4;
+}
+
 .event-marker circle {
   stroke: #ffffff;
   stroke-width: 2;

@@ -131,6 +131,10 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/transcript-periods?ticker=
 Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/filing-types?ticker=NVDA"
 Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/filing-sections?ticker=NVDA&form_type=10-K"
 
+# Replace 269 with a transcript_id from your database. This reads PostgreSQL
+# only; the EarningsCalls.dev API key is not sent to the browser.
+Invoke-RestMethod "http://127.0.0.1:8000/api/transcripts/269"
+
 # OpenAI key and connection check (does not generate an answer)
 Invoke-RestMethod "http://127.0.0.1:8000/api/health/openai"
 

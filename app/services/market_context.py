@@ -12,6 +12,8 @@ from datetime import timedelta
 from dotenv import load_dotenv
 from sqlalchemy import MetaData, Table, create_engine, select
 
+from app.services.transcripts import transcript_viewer_url
+
 
 load_dotenv()
 
@@ -346,7 +348,11 @@ def fetch_market_events(
                 "date": str(row["call_date"]),
                 "label": row["fiscal_period"],
                 "detail": row["title"],
-                "source_url": row["source_url"],
+                # Provider API URLs require credentials. Chart links stay
+                # inside AlphaLens and read the transcript already in SQL.
+                "source_url": transcript_viewer_url(
+                    row["transcript_id"]
+                ),
                 **reactions,
             }
         )

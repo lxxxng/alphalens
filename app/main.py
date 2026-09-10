@@ -146,3 +146,15 @@ def evaluations_page():
     return FileResponse(
         STATIC_DIRECTORY / "evals.html"
     )
+
+
+@app.get(
+    "/transcripts/{transcript_id}",
+    tags=["System"],
+)
+def transcript_page(transcript_id: int):
+    """Serve the local earnings-transcript reader."""
+
+    return FileResponse(
+        STATIC_DIRECTORY / "transcript.html"
+    )
