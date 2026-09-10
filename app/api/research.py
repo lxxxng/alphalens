@@ -101,6 +101,10 @@ from app.rag.generator import (
     preview_evidence,
 )
 
+from app.rag.company_resolver import (
+    resolve_tickers,
+)
+
 from app.services.metadata import (
     get_available_tickers,
     get_filing_sections,
@@ -434,6 +438,14 @@ class TickersResponse(BaseModel):
     """
 
     tickers: list[TickerMetadata]
+
+
+class TickerResolutionResponse(BaseModel):
+    """Companies detected in a natural-language research question."""
+
+    question: str
+
+    tickers: list[str] = Field(default_factory=list)
 
 
 class TranscriptPeriodMetadata(BaseModel):
@@ -1108,6 +1120,38 @@ def metadata_tickers():
         raise HTTPException(
             status_code=500,
             detail="AlphaLens could not load ticker metadata.",
+        ) from error
+
+
+@router.get(
+    "/metadata/resolve-tickers",
+    response_model=TickerResolutionResponse,
+    summary="Resolve companies from a question",
+)
+def metadata_resolve_tickers(
+    question: str = Query(
+        ...,
+        min_length=1,
+        max_length=2000,
+    ),
+):
+    """Resolve company names and ticker symbols without calling OpenAI."""
+
+    try:
+        return {
+            "question": question,
+            "tickers": resolve_tickers(question),
+        }
+    except Exception as error:
+        print(
+            f"[API ERROR] "
+            f"/api/metadata/resolve-tickers: "
+            f"{error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not resolve question tickers.",
         ) from error
 
 

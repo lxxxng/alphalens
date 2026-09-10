@@ -11,12 +11,14 @@ const submitButton = document.querySelector("#submit-button");
 const previewButton = document.querySelector("#preview-button");
 const copyButton = document.querySelector("#copy-button");
 const sampleButton = document.querySelector("#sample-button");
+const questionInput = document.querySelector("#question");
 const tickerPicker = document.querySelector("#ticker-picker");
 const tickerPickerButton = document.querySelector("#ticker-picker-button");
 const tickerPickerLabel = document.querySelector("#ticker-picker-label");
 const tickerMenu = document.querySelector("#ticker-menu");
 const tickerOptions = document.querySelector("#ticker-options");
 const tickerChips = document.querySelector("#ticker-chips");
+const tickerAutoInput = document.querySelector("#ticker-auto");
 const fiscalPeriodSelect = document.querySelector("#fiscal-period");
 const formTypeSelect = document.querySelector("#form-type");
 const sectionKeySelect = document.querySelector("#section-key");
@@ -75,14 +77,21 @@ let metadataReady = false;
 // Selection order is intentional: the first ticker drives metadata filters
 // and headline KPIs while every selected ticker participates in comparison.
 let availableTickers = [];
+const initialTickerParameter = new URLSearchParams(
+  window.location.search
+).get("tickers");
+const initialTickerMode = new URLSearchParams(
+  window.location.search
+).get("ticker_mode");
 let selectedTickers = (
-  new URLSearchParams(window.location.search)
-    .get("tickers")
+  initialTickerParameter
     ?.split(",")
     .map((ticker) => ticker.trim().toUpperCase())
     .filter(Boolean)
     .slice(0, 4)
 ) || ["WMT"];
+let tickerResolutionTimer = null;
+let tickerResolutionRequest = 0;
 let selectedChartPeriod = "1Y";
 let selectedEventFilter = "all";
 let marketChartData = null;
@@ -282,6 +291,7 @@ async function restoreSavedFilters(run) {
   const tickers = restoredTickers.length
     ? restoredTickers
     : [run.ticker_filter].filter(Boolean);
+  tickerAutoInput.checked = false;
   selectedTickers = tickers;
   syncTickerUrl();
   renderTickerPicker();
@@ -420,21 +430,76 @@ function syncTickerUrl() {
     url.searchParams.delete("tickers");
   }
 
+  if (tickerAutoInput.checked) {
+    url.searchParams.set("ticker_mode", "auto");
+  } else {
+    url.searchParams.delete("ticker_mode");
+  }
+
   window.history.replaceState({}, "", url);
 }
 
-async function applyTickerSelection(values) {
-  selectedTickers = [...new Set(
+async function applyTickerSelection(
+  values,
+  { manual = false, refresh = true } = {}
+) {
+  const previousPrimary = primaryTicker();
+  const nextTickers = [...new Set(
     values
       .map((value) => value.trim().toUpperCase())
       .filter(Boolean)
   )].slice(0, 4);
+  const changed = nextTickers.join(",") !== selectedTickers.join(",");
+
+  if (manual) {
+    tickerAutoInput.checked = false;
+  }
+
+  selectedTickers = nextTickers;
   syncTickerUrl();
   renderTickerPicker();
 
-  if (metadataReady) {
-    await loadFiltersForTicker(primaryTicker());
+  if (changed && refresh && metadataReady) {
+    if (previousPrimary !== primaryTicker()) {
+      await loadFiltersForTicker(primaryTicker());
+    }
     await loadMarketChart();
+  }
+}
+
+async function resolveTickersFromQuestion({ refresh = true } = {}) {
+  if (!tickerAutoInput.checked) {
+    return selectedTickers;
+  }
+
+  const question = questionInput.value.trim();
+  const requestId = ++tickerResolutionRequest;
+
+  if (!question) {
+    await applyTickerSelection([], { refresh });
+    return [];
+  }
+
+  try {
+    const params = new URLSearchParams({ question });
+    const data = await fetchJson(
+      `/api/metadata/resolve-tickers?${params}`
+    );
+
+    if (
+      requestId !== tickerResolutionRequest
+      || !tickerAutoInput.checked
+      || question !== questionInput.value.trim()
+    ) {
+      return selectedTickers;
+    }
+
+    await applyTickerSelection(data.tickers || [], { refresh });
+    return selectedTickers;
+  } catch (error) {
+    // Research requests still omit explicit tickers in Auto mode, allowing
+    // the backend resolver to remain the authoritative fallback.
+    return selectedTickers;
   }
 }
 
@@ -457,7 +522,8 @@ function renderTickerPicker() {
     remove.setAttribute("aria-label", `Remove ${ticker}`);
     remove.addEventListener("click", async () => {
       await applyTickerSelection(
-        selectedTickers.filter((value) => value !== ticker)
+        selectedTickers.filter((value) => value !== ticker),
+        { manual: true }
       );
     });
     chip.append(label, remove);
@@ -486,7 +552,7 @@ function renderTickerPicker() {
       const next = input.checked
         ? [...selectedTickers, item.ticker]
         : selectedTickers.filter((value) => value !== item.ticker);
-      await applyTickerSelection(next);
+      await applyTickerSelection(next, { manual: true });
     });
     option.append(input, identity);
     tickerOptions.appendChild(option);
@@ -650,6 +716,11 @@ async function loadFiltersForTicker(ticker) {
 async function initializeMetadata() {
   try {
     await loadTickers();
+
+    if (tickerAutoInput.checked) {
+      await resolveTickersFromQuestion({ refresh: false });
+    }
+
     await loadFiltersForTicker(primaryTicker());
     metadataReady = true;
   } catch (error) {
@@ -1343,7 +1414,7 @@ function payloadFromForm(formData) {
     formData.get("section_key") || ""
   ).trim();
 
-  if (selectedTickers.length) {
+  if (!tickerAutoInput.checked && selectedTickers.length) {
     payload.tickers = [...selectedTickers];
   }
 
@@ -1377,6 +1448,7 @@ sampleButton.addEventListener("click", async () => {
   sampleIndex += 1;
 
   form.elements.question.value = sample.question;
+  tickerAutoInput.checked = true;
   selectedTickers = sample.tickers || [sample.ticker];
   syncTickerUrl();
   renderTickerPicker();
@@ -1416,6 +1488,28 @@ tickerPicker.addEventListener("keydown", (event) => {
     setTickerMenuOpen(false);
     tickerPickerButton.focus();
   }
+});
+
+tickerAutoInput.checked = (
+  initialTickerMode === "auto" || !initialTickerParameter
+);
+tickerAutoInput.addEventListener("change", async () => {
+  if (tickerAutoInput.checked) {
+    await resolveTickersFromQuestion();
+  } else {
+    syncTickerUrl();
+  }
+});
+
+questionInput.addEventListener("input", () => {
+  if (!tickerAutoInput.checked) {
+    return;
+  }
+
+  window.clearTimeout(tickerResolutionTimer);
+  tickerResolutionTimer = window.setTimeout(() => {
+    resolveTickersFromQuestion();
+  }, 450);
 });
 
 for (const button of chartPeriodButtons) {
@@ -1497,6 +1591,10 @@ openAIHealthButton.addEventListener("click", checkOpenAIHealth);
 historyRefreshButton.addEventListener("click", loadResearchHistory);
 
 async function runResearchRequest(mode) {
+  if (tickerAutoInput.checked) {
+    await resolveTickersFromQuestion();
+  }
+
   const payload = payloadFromForm(
     new FormData(form)
   );
@@ -1531,6 +1629,10 @@ async function runResearchRequest(mode) {
 
     if (!response.ok) {
       throw new Error(data.detail || "Research request failed.");
+    }
+
+    if (tickerAutoInput.checked && data.tickers) {
+      await applyTickerSelection(data.tickers);
     }
 
     resultTitle.textContent = "Complete";

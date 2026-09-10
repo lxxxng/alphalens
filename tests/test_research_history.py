@@ -10,6 +10,20 @@ from app.services.research_history import collect_result_tickers
 
 
 class ResearchHistoryTests(unittest.TestCase):
+    def test_question_ticker_metadata_endpoint_returns_all_matches(self):
+        with patch(
+            "app.api.research.resolve_tickers",
+            return_value=["COST", "WMT"],
+        ) as resolver:
+            response = TestClient(app).get(
+                "/api/metadata/resolve-tickers",
+                params={"question": "Compare Costco and Walmart"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["tickers"], ["COST", "WMT"])
+        resolver.assert_called_once_with("Compare Costco and Walmart")
+
     def test_result_tickers_are_normalized_and_deduplicated(self):
         tickers = collect_result_tickers(
             request_data={

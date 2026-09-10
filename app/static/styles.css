@@ -328,6 +328,34 @@ select:focus {
 
 .ticker-control { grid-column: 1 / -1; }
 
+.ticker-control-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ticker-auto-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.ticker-auto-control input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--green);
+}
+
+.ticker-control .ticker-auto-control span {
+  color: inherit;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
 /* The picker stays compact in the research rail while its menu can expose
    company names and the four-company selection limit. */
 .ticker-picker {

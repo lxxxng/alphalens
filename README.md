@@ -488,16 +488,23 @@ Then open:
 http://127.0.0.1:8000
 ```
 
-The UI loads its dropdown choices from metadata endpoints:
+The UI loads its dropdown choices and automatic company matches from metadata
+endpoints:
 
 ```text
 GET /api/metadata/tickers
+GET /api/metadata/resolve-tickers?question=Compare%20Walmart%20and%20Costco
 GET /api/metadata/transcript-periods?ticker=WMT
 GET /api/metadata/filing-types?ticker=NVDA
 GET /api/metadata/filing-sections?ticker=NVDA&form_type=10-K
 ```
 
 These routes read the local database and do not call OpenAI.
+
+Ticker Auto mode is enabled by default. As the question changes, matching
+company names and ticker symbols become selected chips and update the market
+comparison chart. Changing a chip manually disables Auto until it is enabled
+again. A `tickers` URL parameter is also treated as an explicit manual choice.
 
 Check whether the configured API key can authenticate with OpenAI:
 

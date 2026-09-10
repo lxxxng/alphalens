@@ -8,9 +8,29 @@ from app.rag.generator import (
     finalize_grounded_answer,
     resolve_question_tickers,
 )
+from app.rag.company_resolver import resolve_tickers
 
 
 class GeneratorGroundingTests(unittest.TestCase):
+    def test_automatic_tickers_follow_question_mention_order(self):
+        companies = [
+            {"ticker": "WMT", "company_name": "Walmart Inc."},
+            {"ticker": "COST", "company_name": "Costco Wholesale Corporation"},
+        ]
+
+        with (
+            patch("app.rag.company_resolver.get_database_engine"),
+            patch(
+                "app.rag.company_resolver.get_companies",
+                return_value=companies,
+            ),
+        ):
+            tickers = resolve_tickers(
+                "Compare Costco with Walmart margins."
+            )
+
+        self.assertEqual(tickers, ["COST", "WMT"])
+
     def test_explicit_ticker_list_is_normalized_and_deduplicated(self):
         with patch("app.rag.generator.resolve_tickers") as resolver:
             tickers = resolve_question_tickers(

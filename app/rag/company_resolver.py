@@ -592,15 +592,18 @@ def resolve_tickers(
     )
 
 
-    found_tickers = []
+    ticker_positions = {}
 
 
     for alias in aliases:
 
-        if alias_in_question(
-            question=question,
-            alias=alias,
-        ):
+        match = re.search(
+            r"(?<!\w)" + re.escape(alias) + r"(?!\w)",
+            question,
+            flags=re.IGNORECASE,
+        )
+
+        if match:
 
             ticker = (
                 alias_map[
@@ -609,31 +612,21 @@ def resolve_tickers(
             )
 
 
-            # Avoid duplicates.
-            #
-            # Example:
-            #
-            # question:
-            #
-            #     "NVIDIA (NVDA)"
-            #
-            # matches:
-            #
-            #     NVIDIA
-            #     NVDA
-            #
-            # but should return only:
-            #
-            #     ["NVDA"]
-            #
-            if ticker not in found_tickers:
-
-                found_tickers.append(
-                    ticker
-                )
+            # A company can match both its name and ticker. Keep its earliest
+            # mention so comparison order follows the user's wording.
+            ticker_positions[ticker] = min(
+                ticker_positions.get(ticker, match.start()),
+                match.start(),
+            )
 
 
-    return found_tickers
+    return [
+        ticker
+        for ticker, _ in sorted(
+            ticker_positions.items(),
+            key=lambda item: item[1],
+        )
+    ]
 
 
 # ============================================================

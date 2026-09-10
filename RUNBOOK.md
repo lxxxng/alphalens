@@ -126,6 +126,7 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 
 # UI metadata smoke tests
 Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/tickers"
+Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/resolve-tickers?question=Compare%20Costco%20and%20Walmart"
 Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/transcript-periods?ticker=WMT"
 Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/filing-types?ticker=NVDA"
 Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/filing-sections?ticker=NVDA&form_type=10-K"

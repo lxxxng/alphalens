@@ -6,8 +6,8 @@
     <title>AlphaLens Research</title>
     <!-- Version static assets so a long-running local browser cannot combine
          new markup with a stale stylesheet or script. -->
-    <link rel="stylesheet" href="/static/styles.css?v=20260910.2">
-    <link rel="stylesheet" href="/static/navigation.css?v=20260910.2">
+    <link rel="stylesheet" href="/static/styles.css?v=20260910.3">
+    <link rel="stylesheet" href="/static/navigation.css?v=20260910.3">
   </head>
   <body>
     <header class="app-header">
@@ -64,7 +64,13 @@
 
           <div class="control-grid">
             <div class="control ticker-control">
-              <span>Ticker</span>
+              <div class="ticker-control-heading">
+                <span>Ticker</span>
+                <label class="ticker-auto-control">
+                  <input id="ticker-auto" type="checkbox" checked>
+                  <span>Auto</span>
+                </label>
+              </div>
               <div id="ticker-picker" class="ticker-picker">
                 <button
                   id="ticker-picker-button"
@@ -266,6 +272,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260910.2"></script>
+    <script src="/static/app.js?v=20260910.3"></script>
   </body>
 </html>
