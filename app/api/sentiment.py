@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.ml.financial_topics import topic_taxonomy_payload
 from app.services.sentiment import (
     get_filing_sentiment,
+    get_filing_sentiment_timeline,
     get_transcript_sentiment,
     get_transcript_sentiment_timeline,
 )
@@ -42,6 +43,16 @@ def transcript_sentiment(transcript_id: int):
         raise HTTPException(status_code=404, detail="Transcript not found.")
 
     return result
+
+
+@router.get("/filings")
+def filing_sentiment_timeline(
+    ticker: str = Query(min_length=1, max_length=20),
+    form_type: str | None = Query(default=None, max_length=20),
+):
+    """Return filing sentiment history for one company."""
+
+    return get_filing_sentiment_timeline(ticker, form_type=form_type)
 
 
 @router.get("/filings/{accession_number}")

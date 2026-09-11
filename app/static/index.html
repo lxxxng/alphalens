@@ -6,8 +6,8 @@
     <title>AlphaLens Research</title>
     <!-- Version static assets so a long-running local browser cannot combine
          new markup with a stale stylesheet or script. -->
-    <link rel="stylesheet" href="/static/styles.css?v=20260910.5">
-    <link rel="stylesheet" href="/static/navigation.css?v=20260910.5">
+    <link rel="stylesheet" href="/static/styles.css?v=20260911.1">
+    <link rel="stylesheet" href="/static/navigation.css?v=20260911.1">
   </head>
   <body>
     <header class="app-header">
@@ -160,6 +160,9 @@
             <button id="preview-button" class="secondary-button" type="button">
               Preview Evidence
             </button>
+            <button id="brief-button" class="brief-button" type="button">
+              Generate Event Brief
+            </button>
           </div>
         </form>
 
@@ -239,6 +242,51 @@
           <div id="market-events" class="market-events" aria-live="polite"></div>
         </section>
 
+        <section class="signal-panel" aria-labelledby="signal-title">
+          <div class="signal-header">
+            <div>
+              <p class="eyebrow">Derived Intelligence</p>
+              <h2 id="signal-title">Sentiment &amp; Topic Monitor</h2>
+            </div>
+            <div class="signal-source-picker" aria-label="Sentiment source">
+              <button type="button" data-signal-source="transcripts" class="active" aria-pressed="true">Calls</button>
+              <button type="button" data-signal-source="filings" aria-pressed="false">SEC Filings</button>
+            </div>
+          </div>
+          <div id="signal-summary" class="signal-summary" aria-live="polite">
+            <div>
+              <span>Period</span>
+              <strong id="signal-period">Loading</strong>
+            </div>
+            <div>
+              <span>Sentiment</span>
+              <strong id="signal-score">--</strong>
+            </div>
+            <div>
+              <span>Change vs prior</span>
+              <strong id="signal-change">--</strong>
+            </div>
+            <div>
+              <span>Model coverage</span>
+              <strong id="signal-coverage">--</strong>
+            </div>
+          </div>
+          <div class="signal-body">
+            <div class="signal-trend-wrap">
+              <p class="signal-axis-caption">FinBERT polarity score: -1 negative, 0 neutral, +1 positive</p>
+              <svg id="signal-trend" class="signal-trend" role="img" aria-label="Sentiment score history"></svg>
+            </div>
+            <div>
+              <div class="topic-heading">
+                <h3>Current Topic Signals</h3>
+                <span id="topic-audience">Management commentary</span>
+              </div>
+              <div id="topic-signals" class="topic-signals"></div>
+            </div>
+          </div>
+          <p id="signal-empty" class="signal-empty" hidden></p>
+        </section>
+
         <section class="research-output">
           <div class="answer-header">
             <div>
@@ -254,6 +302,7 @@
           </div>
 
           <article id="answer" class="answer-text">Ask a question to search SEC filings, earnings call transcripts, or both.</article>
+          <article id="brief-output" class="brief-output" hidden></article>
 
           <section id="market-panel" class="market-panel" hidden>
             <div class="sources-header">
@@ -273,6 +322,6 @@
     </main>
 
     <script src="/static/formatters.js?v=20260910.1"></script>
-    <script src="/static/app.js?v=20260910.5"></script>
+    <script src="/static/app.js?v=20260911.1"></script>
   </body>
 </html>

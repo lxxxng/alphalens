@@ -346,8 +346,12 @@ def get_transcript_sentiment_timeline(ticker: str) -> dict:
     }
 
 
-def get_filing_sentiment(accession_number: str) -> dict | None:
-    """Aggregate one filing across selected narrative sections."""
+def _filing_rows(
+    accession_number: str | None = None,
+    ticker: str | None = None,
+    form_type: str | None = None,
+) -> list[dict]:
+    """Load eligible filing chunks and their version-matched scores."""
 
     engine = get_database_engine()
     metadata = MetaData()
@@ -385,22 +389,38 @@ def get_filing_sentiment(accession_number: str) -> dict | None:
                 ),
             )
         )
-        .where(
-            chunks.c.accession_number == accession_number,
-            chunks.c.section_key.in_(FILING_SENTIMENT_SECTION_KEYS),
+        .where(chunks.c.section_key.in_(FILING_SENTIMENT_SECTION_KEYS))
+        .order_by(
+            chunks.c.filing_date,
+            chunks.c.accession_number,
+            chunks.c.section_key,
+            chunks.c.chunk_index,
         )
-        .order_by(chunks.c.section_key, chunks.c.chunk_index)
     )
 
+    if accession_number:
+        query = query.where(chunks.c.accession_number == accession_number)
+
+    if ticker:
+        query = query.where(chunks.c.ticker == ticker.upper())
+
+    if form_type:
+        query = query.where(chunks.c.form_type == form_type.upper())
+
     with engine.connect() as connection:
-        rows = [
+        return [
             dict(row)
             for row in connection.execute(query).mappings().all()
         ]
 
+
+def build_filing_summary(rows: list[dict]) -> dict | None:
+    """Aggregate one filing across selected narrative sections."""
+
     if not rows:
         return None
 
+    model_name, model_revision = model_config()
     section_rows = defaultdict(list)
 
     for row in rows:
@@ -426,4 +446,75 @@ def get_filing_sentiment(accession_number: str) -> dict | None:
             for (section_key, section_title), group_rows
             in section_rows.items()
         ],
+    }
+
+
+def get_filing_sentiment(accession_number: str) -> dict | None:
+    """Return one filing's coverage-aware sentiment summary."""
+
+    return build_filing_summary(
+        _filing_rows(accession_number=accession_number)
+    )
+
+
+def get_filing_sentiment_timeline(
+    ticker: str,
+    form_type: str | None = None,
+) -> dict:
+    """Return comparable filing summaries in filing-date order."""
+
+    rows = _filing_rows(ticker=ticker, form_type=form_type)
+    grouped = defaultdict(list)
+
+    for row in rows:
+        grouped[row["accession_number"]].append(row)
+
+    filings = [
+        build_filing_summary(group_rows)
+        for group_rows in grouped.values()
+    ]
+    previous_filing = None
+
+    for filing in filings:
+        current_score = filing["overall"]["score"]
+        previous_score = (
+            previous_filing["overall"]["score"]
+            if previous_filing is not None
+            else None
+        )
+        filing["score_change"] = (
+            round(current_score - previous_score, 6)
+            if current_score is not None and previous_score is not None
+            else None
+        )
+        previous_topics = {
+            topic["topic_key"]: topic
+            for topic in (previous_filing or {}).get("topics", [])
+        }
+
+        for topic in filing["topics"]:
+            previous_topic = previous_topics.get(topic["topic_key"])
+            previous_topic_score = (
+                previous_topic.get("score") if previous_topic else None
+            )
+            topic["score_change"] = (
+                round(topic["score"] - previous_topic_score, 6)
+                if (
+                    topic["score"] is not None
+                    and previous_topic_score is not None
+                )
+                else None
+            )
+
+        previous_filing = filing
+
+    model_name, model_revision = model_config()
+    return {
+        "ticker": ticker.upper(),
+        "form_type": form_type.upper() if form_type else None,
+        "model_name": model_name,
+        "model_revision": model_revision,
+        "topic_audience": "filing_narrative",
+        "topic_classifier_version": TOPIC_CLASSIFIER_VERSION,
+        "filings": filings,
     }

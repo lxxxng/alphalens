@@ -9,6 +9,7 @@ const statusPill = document.querySelector("#status-pill");
 const resultTitle = document.querySelector("#result-title");
 const submitButton = document.querySelector("#submit-button");
 const previewButton = document.querySelector("#preview-button");
+const briefButton = document.querySelector("#brief-button");
 const copyButton = document.querySelector("#copy-button");
 const sampleButton = document.querySelector("#sample-button");
 const questionInput = document.querySelector("#question");
@@ -41,6 +42,18 @@ const chartBenchmarkReturn = document.querySelector("#chart-benchmark-return");
 const chartRelativeReturn = document.querySelector("#chart-relative-return");
 const chartEventCount = document.querySelector("#chart-event-count");
 const marketEvents = document.querySelector("#market-events");
+const briefOutput = document.querySelector("#brief-output");
+const signalSourceButtons = document.querySelectorAll("[data-signal-source]");
+const signalSummary = document.querySelector("#signal-summary");
+const signalBody = document.querySelector(".signal-body");
+const signalPeriod = document.querySelector("#signal-period");
+const signalScore = document.querySelector("#signal-score");
+const signalChange = document.querySelector("#signal-change");
+const signalCoverage = document.querySelector("#signal-coverage");
+const signalTrend = document.querySelector("#signal-trend");
+const signalEmpty = document.querySelector("#signal-empty");
+const topicAudience = document.querySelector("#topic-audience");
+const topicSignals = document.querySelector("#topic-signals");
 const researchOutput = document.querySelector(".research-output");
 const historyList = document.querySelector("#history-list");
 const historyRefreshButton = document.querySelector("#history-refresh");
@@ -97,6 +110,9 @@ let selectedChartPeriod = "1Y";
 let selectedEventFilter = "all";
 let marketChartData = null;
 let marketChartRequest = 0;
+let selectedSignalSource = "transcripts";
+let signalRequest = 0;
+let lastCopyText = answer.textContent.trim();
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const COMPANY_CHART_COLORS = ["#087f5b", "#6d4aff", "#0f8ea8", "#c24156"];
@@ -124,6 +140,7 @@ function setStatus(label, state = "") {
 function setBusy(isBusy) {
   submitButton.disabled = isBusy;
   previewButton.disabled = isBusy;
+  briefButton.disabled = isBusy;
 }
 
 function renderOpenAIHealth(data) {
@@ -314,7 +331,10 @@ async function restoreSavedFilters(run) {
 
   setSelectValue(sectionKeySelect, run.section_key);
   updateFilterState();
-  await loadMarketChart();
+  await Promise.all([
+    loadMarketChart(),
+    loadSentimentSignals(),
+  ]);
 }
 
 async function openSavedResearchRun(runId) {
@@ -330,7 +350,7 @@ async function openSavedResearchRun(runId) {
 
     await restoreSavedFilters(data);
     resultTitle.textContent = `Saved Run #${data.run_id}`;
-    answer.textContent = data.answer;
+    showPlainAnswer(data.answer);
     renderMarketContext(data.market_context || []);
     renderSources(data.sources || []);
     setStatus("History");
@@ -464,7 +484,10 @@ async function applyTickerSelection(
     if (previousPrimary !== primaryTicker()) {
       await loadFiltersForTicker(primaryTicker());
     }
-    await loadMarketChart();
+    await Promise.all([
+      loadMarketChart(),
+      loadSentimentSignals(),
+    ]);
   }
 }
 
@@ -564,6 +587,16 @@ function selectedSourceType() {
   return formDataSourceType(
     new FormData(form)
   );
+}
+
+function setSignalSource(value) {
+  selectedSignalSource = value;
+
+  for (const button of signalSourceButtons) {
+    const isActive = button.dataset.signalSource === value;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  }
 }
 
 function formDataSourceType(formData) {
@@ -730,7 +763,10 @@ async function initializeMetadata() {
     setStatus("Metadata unavailable", "error");
   }
 
-  await loadMarketChart();
+  await Promise.all([
+    loadMarketChart(),
+    loadSentimentSignals(),
+  ]);
 }
 
 function formatPercent(value) {
@@ -759,6 +795,283 @@ function svgElement(name, attributes = {}) {
   }
 
   return element;
+}
+
+function formatSentimentScore(value) {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}`;
+}
+
+function setSentimentClass(element, value) {
+  element.className = Number.isFinite(value)
+    ? (value >= 0 ? "positive" : "negative")
+    : "";
+}
+
+function transcriptManagementAggregate(call) {
+  return call.groups?.find((group) => group.group === "management")
+    || call.overall
+    || {};
+}
+
+function signalRecordLabel(record) {
+  if (selectedSignalSource === "transcripts") {
+    return formatFiscalPeriod(record.fiscal_period);
+  }
+
+  return [record.form_type, record.filing_date].filter(Boolean).join(" | ");
+}
+
+function renderSignalTrend(records, selectedIndex) {
+  signalTrend.replaceChildren();
+  const points = records
+    .map((record, index) => ({
+      index,
+      label: signalRecordLabel(record),
+      score: selectedSignalSource === "transcripts"
+        ? transcriptManagementAggregate(record).score
+        : record.overall?.score,
+    }))
+    .filter((point) => Number.isFinite(point.score));
+
+  if (!points.length) {
+    return;
+  }
+
+  const width = 540;
+  const height = 205;
+  const margin = { top: 14, right: 14, bottom: 28, left: 31 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const x = (index) => margin.left + (
+    records.length === 1 ? plotWidth / 2 : index * plotWidth / (records.length - 1)
+  );
+  const y = (score) => margin.top + (1 - score) * plotHeight / 2;
+  signalTrend.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  signalTrend.setAttribute(
+    "aria-label",
+    `${primaryTicker()} sentiment history from ${points[0].label} to ${points.at(-1).label}`
+  );
+
+  for (const score of [1, 0.5, 0, -0.5, -1]) {
+    signalTrend.appendChild(svgElement("line", {
+      x1: margin.left,
+      x2: width - margin.right,
+      y1: y(score),
+      y2: y(score),
+      class: score === 0 ? "signal-zero-line" : "signal-grid-line",
+    }));
+
+    if ([1, 0, -1].includes(score)) {
+      const label = svgElement("text", {
+        x: margin.left - 7,
+        y: y(score) + 3,
+        class: "signal-axis-label",
+        "text-anchor": "end",
+      });
+      label.textContent = score > 0 ? "+1" : String(score);
+      signalTrend.appendChild(label);
+    }
+  }
+
+  const path = points.map((point, index) => {
+    const command = index === 0 ? "M" : "L";
+    return `${command}${x(point.index).toFixed(2)},${y(point.score).toFixed(2)}`;
+  }).join(" ");
+  signalTrend.appendChild(svgElement("path", {
+    d: path,
+    class: "signal-line",
+  }));
+
+  for (const point of points) {
+    const marker = svgElement("circle", {
+      cx: x(point.index),
+      cy: y(point.score),
+      r: point.index === selectedIndex ? 5 : 3.5,
+      class: `signal-point${point.index === selectedIndex ? " selected" : ""}`,
+    });
+    const title = svgElement("title");
+    title.textContent = `${point.label}: ${formatSentimentScore(point.score)}`;
+    marker.appendChild(title);
+    signalTrend.appendChild(marker);
+  }
+
+  const labelIndexes = [...new Set([
+    points[0].index,
+    selectedIndex,
+    points.at(-1).index,
+  ])].filter((index) => index >= 0);
+
+  for (const index of labelIndexes) {
+    const record = records[index];
+    const label = svgElement("text", {
+      x: x(index),
+      y: height - 7,
+      class: "signal-axis-label",
+      "text-anchor": index === 0
+        ? "start"
+        : (index === records.length - 1 ? "end" : "middle"),
+    });
+    label.textContent = selectedSignalSource === "transcripts"
+      ? record.fiscal_period
+      : record.filing_date;
+    signalTrend.appendChild(label);
+  }
+}
+
+function renderTopicSignals(topics) {
+  topicSignals.replaceChildren();
+
+  if (!topics.length) {
+    const empty = document.createElement("p");
+    empty.className = "signal-empty";
+    empty.textContent = "No topic-level scores are available for this event.";
+    topicSignals.appendChild(empty);
+    return;
+  }
+
+  for (const topic of topics.slice(0, 6)) {
+    const row = document.createElement("div");
+    row.className = "topic-row";
+    const identity = document.createElement("div");
+    identity.className = "topic-label";
+    const label = document.createElement("strong");
+    label.textContent = topic.topic_label;
+    const detail = document.createElement("small");
+    const delta = Number.isFinite(topic.score_change)
+      ? `${formatSentimentScore(topic.score_change)} vs prior`
+      : "No prior comparison";
+    detail.textContent = `${topic.eligible_items || 0} passages | ${delta}`;
+    identity.append(label, detail);
+
+    const meter = document.createElement("div");
+    meter.className = "topic-meter";
+    const bar = document.createElement("span");
+    const score = Number.isFinite(topic.score) ? topic.score : 0;
+    const magnitude = Math.min(1, Math.abs(score)) * 50;
+    bar.className = score >= 0 ? "positive" : "negative";
+    bar.style.left = score >= 0 ? "50%" : `${50 - magnitude}%`;
+    bar.style.width = `${magnitude}%`;
+    meter.appendChild(bar);
+
+    const value = document.createElement("span");
+    value.className = "topic-value";
+    value.textContent = formatSentimentScore(topic.score);
+    row.append(identity, meter, value);
+    topicSignals.appendChild(row);
+  }
+}
+
+function renderSentimentSignals(data) {
+  const records = selectedSignalSource === "transcripts"
+    ? (data.calls || [])
+    : (data.filings || []);
+
+  if (!records.length) {
+    signalSummary.hidden = true;
+    signalBody.hidden = true;
+    signalEmpty.hidden = false;
+    signalEmpty.textContent = `No scored ${selectedSignalSource === "transcripts" ? "calls" : "filings"} found for ${primaryTicker()}.`;
+    return;
+  }
+
+  let selectedIndex = records.length - 1;
+  const requestedPeriod = fiscalPeriodSelect.value;
+
+  if (selectedSignalSource === "transcripts" && requestedPeriod) {
+    const match = records.findIndex(
+      (record) => record.fiscal_period === requestedPeriod
+    );
+    selectedIndex = match >= 0 ? match : selectedIndex;
+  }
+
+  const current = records[selectedIndex];
+  const aggregate = selectedSignalSource === "transcripts"
+    ? transcriptManagementAggregate(current)
+    : (current.overall || {});
+  const previous = selectedIndex > 0 ? records[selectedIndex - 1] : null;
+  const previousAggregate = previous
+    ? (selectedSignalSource === "transcripts"
+      ? transcriptManagementAggregate(previous)
+      : (previous.overall || {}))
+    : null;
+  const change = (
+    Number.isFinite(aggregate.score)
+    && Number.isFinite(previousAggregate?.score)
+  ) ? aggregate.score - previousAggregate.score : null;
+
+  signalSummary.hidden = false;
+  signalBody.hidden = false;
+  signalEmpty.hidden = true;
+  signalPeriod.textContent = [
+    signalRecordLabel(current),
+    selectedSignalSource === "transcripts" ? current.call_date : null,
+  ].filter(Boolean).join(" | ");
+  signalScore.textContent = `${aggregate.label || "unscored"} ${formatSentimentScore(aggregate.score)}`;
+  setSentimentClass(signalScore, aggregate.score);
+  signalChange.textContent = Number.isFinite(change)
+    ? `${formatSentimentScore(change)} points`
+    : "No prior event";
+  setSentimentClass(signalChange, change);
+  signalCoverage.textContent = Number.isFinite(aggregate.coverage)
+    ? `${(aggregate.coverage * 100).toFixed(0)}% (${aggregate.scored_items}/${aggregate.eligible_items})`
+    : "--";
+  topicAudience.textContent = selectedSignalSource === "transcripts"
+    ? "Management commentary"
+    : "SEC narrative sections";
+  renderSignalTrend(records, selectedIndex);
+  renderTopicSignals(current.topics || []);
+}
+
+async function loadSentimentSignals() {
+  const ticker = primaryTicker();
+  const requestId = ++signalRequest;
+
+  if (!ticker) {
+    renderSentimentSignals({});
+    return;
+  }
+
+  signalPeriod.textContent = "Loading";
+  signalScore.textContent = "--";
+  signalChange.textContent = "--";
+  signalCoverage.textContent = "--";
+  signalEmpty.hidden = true;
+
+  try {
+    const params = new URLSearchParams({ ticker });
+
+    if (selectedSignalSource === "filings" && formTypeSelect.value) {
+      params.set("form_type", formTypeSelect.value);
+    }
+
+    const endpoint = selectedSignalSource === "transcripts"
+      ? "/api/sentiment/transcripts"
+      : "/api/sentiment/filings";
+    const response = await fetch(`${endpoint}?${params}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Sentiment request failed.");
+    }
+
+    if (requestId === signalRequest) {
+      renderSentimentSignals(data);
+    }
+  } catch (error) {
+    if (requestId !== signalRequest) {
+      return;
+    }
+
+    signalSummary.hidden = true;
+    signalBody.hidden = true;
+    signalEmpty.hidden = false;
+    signalEmpty.textContent = error.message;
+  }
 }
 
 function chartLinePath(points, xScale, yScale) {
@@ -1427,6 +1740,76 @@ function renderSources(items) {
   }
 }
 
+function showPlainAnswer(text) {
+  briefOutput.hidden = true;
+  answer.hidden = false;
+  answer.textContent = text;
+  lastCopyText = text.trim();
+}
+
+function appendBriefSection(container, title, items) {
+  const section = document.createElement("section");
+  section.className = "brief-section";
+  const heading = document.createElement("h4");
+  heading.textContent = title;
+  const list = document.createElement("ul");
+  const values = items?.length ? items : ["No material item identified."];
+
+  for (const item of values) {
+    const entry = document.createElement("li");
+    entry.textContent = item;
+    list.appendChild(entry);
+  }
+
+  section.append(heading, list);
+  container.appendChild(section);
+}
+
+function renderEventBrief(brief) {
+  answer.hidden = true;
+  briefOutput.hidden = false;
+  briefOutput.replaceChildren();
+
+  const headline = document.createElement("h3");
+  headline.className = "brief-headline";
+  headline.textContent = brief.headline;
+  const executiveSummary = document.createElement("p");
+  executiveSummary.className = "brief-executive-summary";
+  executiveSummary.textContent = brief.executive_summary;
+  const sections = document.createElement("div");
+  sections.className = "brief-sections";
+
+  for (const [title, items] of [
+    ["Key Developments", brief.key_developments],
+    ["Topic Signals", brief.topic_signals],
+    ["Market Reaction", brief.market_reaction],
+    ["Risks", brief.risks],
+    ["Watch Items", brief.watch_items],
+    ["Limitations", brief.limitations],
+  ]) {
+    appendBriefSection(sections, title, items);
+  }
+
+  briefOutput.append(headline, executiveSummary, sections);
+  lastCopyText = [
+    brief.headline,
+    "",
+    brief.executive_summary,
+    ...[
+      ["Key Developments", brief.key_developments],
+      ["Topic Signals", brief.topic_signals],
+      ["Market Reaction", brief.market_reaction],
+      ["Risks", brief.risks],
+      ["Watch Items", brief.watch_items],
+      ["Limitations", brief.limitations],
+    ].flatMap(([title, items]) => [
+      "",
+      title,
+      ...(items || []).map((item) => `- ${item}`),
+    ]),
+  ].join("\n").trim();
+}
+
 function payloadFromForm(formData) {
   // Only send optional filters when the user has supplied them. Empty
   // strings should mean "let the backend decide".
@@ -1486,6 +1869,10 @@ sampleButton.addEventListener("click", async () => {
   renderTickerPicker();
   setSourceType(sample.source_type);
 
+  if (["transcripts", "filings"].includes(sample.source_type)) {
+    setSignalSource(sample.source_type);
+  }
+
   if (metadataReady) {
     await loadFiltersForTicker(primaryTicker());
   }
@@ -1502,7 +1889,10 @@ sampleButton.addEventListener("click", async () => {
 
   form.elements.section_key.value = sample.section_key || "";
   updateFilterState();
-  await loadMarketChart();
+  await Promise.all([
+    loadMarketChart(),
+    loadSentimentSignals(),
+  ]);
 });
 
 tickerPickerButton.addEventListener("click", () => {
@@ -1590,14 +1980,38 @@ formTypeSelect.addEventListener("change", async () => {
     primaryTicker(),
     formTypeSelect.value
   );
+
+  if (selectedSignalSource === "filings") {
+    await loadSentimentSignals();
+  }
 });
 
+fiscalPeriodSelect.addEventListener("change", () => {
+  if (selectedSignalSource === "transcripts") {
+    loadSentimentSignals();
+  }
+});
+
+for (const button of signalSourceButtons) {
+  button.addEventListener("click", async () => {
+    setSignalSource(button.dataset.signalSource);
+    await loadSentimentSignals();
+  });
+}
+
 for (const radio of form.querySelectorAll("input[name='source_type']")) {
-  radio.addEventListener("change", updateFilterState);
+  radio.addEventListener("change", async () => {
+    updateFilterState();
+
+    if (["transcripts", "filings"].includes(radio.value)) {
+      setSignalSource(radio.value);
+      await loadSentimentSignals();
+    }
+  });
 }
 
 copyButton.addEventListener("click", async () => {
-  const text = answer.textContent.trim();
+  const text = lastCopyText;
 
   if (!text) {
     return;
@@ -1636,9 +2050,9 @@ async function runResearchRequest(mode) {
   setBusy(true);
   setStatus("Running", "loading");
   resultTitle.textContent = isPreview ? "Previewing" : "Searching";
-  answer.textContent = isPreview
+  showPlainAnswer(isPreview
     ? "Retrieving evidence only..."
-    : "Retrieving evidence and generating the answer...";
+    : "Retrieving evidence and generating the answer...");
   renderMarketContext([]);
   renderSources([]);
 
@@ -1668,7 +2082,7 @@ async function runResearchRequest(mode) {
     }
 
     resultTitle.textContent = "Complete";
-    answer.textContent = isPreview
+    showPlainAnswer(isPreview
       ? [
           "Evidence preview loaded.",
           `${(data.sources || []).length} text source(s) found.`,
@@ -1676,7 +2090,7 @@ async function runResearchRequest(mode) {
           "",
           "Open the source cards below to inspect the exact retrieved chunks.",
         ].join("\n")
-      : data.answer;
+      : data.answer);
     renderMarketContext(data.market_context || []);
     renderSources(data.sources || []);
     setStatus("Done");
@@ -1691,7 +2105,76 @@ async function runResearchRequest(mode) {
     });
   } catch (error) {
     resultTitle.textContent = "Error";
-    answer.textContent = error.message;
+    showPlainAnswer(error.message);
+    setStatus("Error", "error");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function runEventBrief() {
+  if (tickerAutoInput.checked) {
+    await resolveTickersFromQuestion();
+  }
+
+  const ticker = primaryTicker();
+
+  if (!ticker) {
+    resultTitle.textContent = "Ticker required";
+    showPlainAnswer("Select a company or mention one in the question before generating a brief.");
+    setStatus("Needs ticker", "error");
+    return;
+  }
+
+  const sourceType = selectedSourceType();
+  const eventType = sourceType === "transcripts"
+    ? "earnings"
+    : (sourceType === "filings" ? "filing" : "combined");
+  const payload = {
+    ticker,
+    event_type: eventType,
+    top_k: Math.min(12, Number(form.elements.top_k.value || 6)),
+  };
+
+  if (eventType !== "filing" && fiscalPeriodSelect.value) {
+    payload.fiscal_period = fiscalPeriodSelect.value;
+  }
+
+  if (eventType !== "earnings" && formTypeSelect.value) {
+    payload.form_type = formTypeSelect.value;
+  }
+
+  setBusy(true);
+  setStatus("Running", "loading");
+  resultTitle.textContent = "Building Event Brief";
+  showPlainAnswer("Collecting event evidence, market reaction, and sentiment signals...");
+  renderMarketContext([]);
+  renderSources([]);
+
+  try {
+    const response = await fetch("/api/briefs/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Event brief request failed.");
+    }
+
+    resultTitle.textContent = `${data.ticker} Event Brief`;
+    renderEventBrief(data.brief);
+    renderMarketContext(data.market_context || []);
+    renderSources(data.sources || []);
+    setStatus("Done");
+    researchOutput.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  } catch (error) {
+    resultTitle.textContent = "Brief Error";
+    showPlainAnswer(error.message);
     setStatus("Error", "error");
   } finally {
     setBusy(false);
@@ -1707,3 +2190,5 @@ form.addEventListener("submit", async (event) => {
 previewButton.addEventListener("click", async () => {
   await runResearchRequest("preview");
 });
+
+briefButton.addEventListener("click", runEventBrief);

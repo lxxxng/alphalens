@@ -132,6 +132,7 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 # Coverage-aware sentiment API smoke tests
 Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/transcripts?ticker=WMT"
 Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/transcripts/287"
+Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/filings?ticker=WMT&form_type=10-K"
 Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/filings/0000104169-21-000058"
 Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/topics"
 

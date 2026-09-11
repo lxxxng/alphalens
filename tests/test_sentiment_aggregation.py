@@ -8,9 +8,11 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.ml.financial_topics import classify_financial_topics
 from app.services.sentiment import (
+    build_filing_summary,
     build_topic_summaries,
     build_transcript_summary,
     coverage_summary,
+    get_filing_sentiment_timeline,
     get_transcript_sentiment_timeline,
     speaker_group,
     summarize_sentiment_rows,
@@ -44,6 +46,22 @@ def _row(
             "negative": 0.1,
             "neutral": 0.1,
         },
+    }
+
+
+def _filing_row(accession="first", filing_date="2026-03-01", score=0.1):
+    return {
+        **_row(
+            role=None,
+            score=score,
+            content="Gross margin and operating efficiency improved.",
+        ),
+        "accession_number": accession,
+        "form_type": "10-K",
+        "filing_date": filing_date,
+        "section_key": "item_7_md_and_a",
+        "section_title": "Management Discussion and Analysis",
+        "chunk_id": 101,
     }
 
 
@@ -165,6 +183,21 @@ class SentimentAggregationTests(unittest.TestCase):
         self.assertEqual(margin["score"], 0.6)
         self.assertEqual(margin["eligible_items"], 1)
 
+    def test_filing_summary_aggregates_narrative_sections(self):
+        summary = build_filing_summary([
+            _filing_row(score=0.4),
+            {
+                **_filing_row(score=-0.2),
+                "section_key": "item_1a_risk_factors",
+                "section_title": "Risk Factors",
+                "chunk_id": 102,
+            },
+        ])
+
+        self.assertEqual(summary["accession_number"], "first")
+        self.assertEqual(len(summary["sections"]), 2)
+        self.assertEqual(summary["overall"]["score"], 0.1)
+
     def test_transcript_sentiment_api(self):
         result = {"transcript_id": 20, "overall": {"coverage": 1.0}}
 
@@ -212,6 +245,28 @@ class SentimentAggregationTests(unittest.TestCase):
             0.3,
         )
 
+    def test_filing_timeline_calculates_filing_over_filing_change(self):
+        rows = [
+            _filing_row(score=0.1),
+            _filing_row("second", "2026-06-01", score=0.4),
+        ]
+
+        with patch(
+            "app.services.sentiment._filing_rows",
+            return_value=rows,
+        ) as filing_rows:
+            result = get_filing_sentiment_timeline("wmt", "10-k")
+
+        filing_rows.assert_called_once_with(ticker="wmt", form_type="10-k")
+        self.assertEqual(result["ticker"], "WMT")
+        self.assertEqual(result["form_type"], "10-K")
+        self.assertIsNone(result["filings"][0]["score_change"])
+        self.assertEqual(result["filings"][1]["score_change"], 0.3)
+        self.assertEqual(
+            result["filings"][1]["topics"][0]["score_change"],
+            0.3,
+        )
+
     def test_topic_taxonomy_api_is_versioned(self):
         response = TestClient(app).get("/api/sentiment/topics")
 
@@ -229,6 +284,21 @@ class SentimentAggregationTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 404)
+
+    def test_filing_timeline_api_accepts_optional_form_type(self):
+        result = {"ticker": "WMT", "form_type": "10-K", "filings": []}
+
+        with patch(
+            "app.api.sentiment.get_filing_sentiment_timeline",
+            return_value=result,
+        ) as timeline:
+            response = TestClient(app).get(
+                "/api/sentiment/filings?ticker=wmt&form_type=10-k"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), result)
+        timeline.assert_called_once_with("wmt", form_type="10-k")
 
 
 if __name__ == "__main__":

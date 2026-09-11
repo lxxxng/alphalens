@@ -490,6 +490,7 @@ section summaries even while a backfill is still running:
 ```text
 GET /api/sentiment/transcripts?ticker=WMT
 GET /api/sentiment/transcripts/287
+GET /api/sentiment/filings?ticker=WMT&form_type=10-K
 GET /api/sentiment/filings/0000104169-21-000058
 GET /api/sentiment/topics
 ```
@@ -579,6 +580,12 @@ Then open:
 ```text
 http://127.0.0.1:8000
 ```
+
+The research workspace keeps the price and event chart as its primary view.
+The supporting signal monitor can switch between management-call and SEC
+narrative sentiment, compare each score with the prior event, and show current
+topic-level polarity and coverage. `Generate Event Brief` renders the LCEL
+workflow's structured output alongside its market facts and source evidence.
 
 The UI loads its dropdown choices and automatic company matches from metadata
 endpoints:
