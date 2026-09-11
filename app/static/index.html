@@ -4,10 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>AlphaLens Research</title>
+    <script src="/static/theme.js?v=20260911.2"></script>
     <!-- Version static assets so a long-running local browser cannot combine
          new markup with a stale stylesheet or script. -->
-    <link rel="stylesheet" href="/static/styles.css?v=20260911.1">
-    <link rel="stylesheet" href="/static/navigation.css?v=20260911.1">
+    <link rel="stylesheet" href="/static/styles.css?v=20260911.8">
+    <link rel="stylesheet" href="/static/navigation.css?v=20260911.3">
   </head>
   <body>
     <header class="app-header">
@@ -23,6 +24,10 @@
           <a class="nav-link active" href="/">Research</a>
           <a class="nav-link" href="/evals">Evaluations</a>
           <a class="nav-link" href="/docs">API</a>
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false" title="Toggle color theme">
+            <span class="theme-switch" aria-hidden="true"><span></span></span>
+            <span id="theme-label">Light</span>
+          </button>
           <button
             id="openai-health"
             class="connection-status checking"
@@ -153,15 +158,24 @@
             </label>
           </fieldset>
 
+          <fieldset class="output-picker">
+            <legend>Output</legend>
+            <label>
+              <input type="radio" name="output_mode" value="answer" checked>
+              <span>Answer</span>
+            </label>
+            <label>
+              <input type="radio" name="output_mode" value="brief">
+              <span>Event Brief</span>
+            </label>
+          </fieldset>
+
           <div class="form-actions">
             <button id="submit-button" class="primary-button" type="submit">
-              Search
+              Generate Answer
             </button>
             <button id="preview-button" class="secondary-button" type="button">
               Preview Evidence
-            </button>
-            <button id="brief-button" class="brief-button" type="button">
-              Generate Event Brief
             </button>
           </div>
         </form>
@@ -182,9 +196,22 @@
         </section>
       </aside>
 
-      <!-- Market reaction leads the workspace; generated analysis and its
-           auditable evidence remain together directly below the chart. -->
+      <!-- The main canvas switches between market intelligence and research
+           output while the query rail remains attached on the right. -->
       <section class="answer-panel" aria-live="polite">
+        <div class="workspace-switcher">
+          <div>
+            <p class="eyebrow">Workspace</p>
+            <strong id="workspace-title">Market View</strong>
+          </div>
+          <div class="workspace-tabs" role="tablist" aria-label="Workspace view">
+            <button id="market-tab" type="button" role="tab" data-workspace-view="market" aria-selected="true" aria-controls="market-view" class="active">Market</button>
+            <button id="research-tab" type="button" role="tab" data-workspace-view="research" aria-selected="false" aria-controls="research-view">Research</button>
+          </div>
+        </div>
+
+        <div class="workspace-carousel">
+          <section id="market-view" class="workspace-slide" role="tabpanel" aria-labelledby="market-tab">
         <section class="price-chart-panel" aria-labelledby="price-chart-title">
           <div class="chart-header">
             <div>
@@ -228,7 +255,7 @@
               <strong id="chart-event-count">--</strong>
             </div>
           </div>
-          <p class="chart-axis-caption">Y-axis · cumulative return since period start (%)</p>
+          <p class="chart-axis-caption">Y-axis - cumulative return since period start (%)</p>
           <div id="price-chart" class="price-chart" aria-live="polite">
             <svg
               id="price-chart-svg"
@@ -253,6 +280,7 @@
               <button type="button" data-signal-source="filings" aria-pressed="false">SEC Filings</button>
             </div>
           </div>
+          <div id="signal-ticker-controls" class="signal-ticker-controls" hidden></div>
           <div id="signal-summary" class="signal-summary" aria-live="polite">
             <div>
               <span>Period</span>
@@ -275,6 +303,7 @@
             <div class="signal-trend-wrap">
               <p class="signal-axis-caption">FinBERT polarity score: -1 negative, 0 neutral, +1 positive</p>
               <svg id="signal-trend" class="signal-trend" role="img" aria-label="Sentiment score history"></svg>
+              <div id="signal-trend-legend" class="signal-trend-legend"></div>
             </div>
             <div>
               <div class="topic-heading">
@@ -286,18 +315,28 @@
           </div>
           <p id="signal-empty" class="signal-empty" hidden></p>
         </section>
+          </section>
 
-        <section class="research-output">
+          <section id="research-view" class="workspace-slide" role="tabpanel" aria-labelledby="research-tab" hidden>
+        <section class="research-output" aria-label="Research result">
           <div class="answer-header">
             <div>
               <p class="eyebrow">Investment Brief</p>
               <h2 id="result-title">Ready</h2>
+              <p id="result-scope" class="result-scope">Awaiting research</p>
             </div>
             <div class="answer-actions">
               <button id="copy-button" class="ghost-button" type="button">
                 Copy
               </button>
               <span id="status-pill" class="status-pill">Idle</span>
+              <button
+                id="result-close"
+                class="result-close"
+                type="button"
+                title="Return to market view"
+                aria-label="Return to market view"
+              >&#8592;</button>
             </div>
           </div>
 
@@ -318,10 +357,12 @@
           </div>
           <div id="sources" class="sources-list"></div>
         </section>
+          </section>
+        </div>
       </section>
     </main>
 
     <script src="/static/formatters.js?v=20260910.1"></script>
-    <script src="/static/app.js?v=20260911.1"></script>
+    <script src="/static/app.js?v=20260911.7"></script>
   </body>
 </html>

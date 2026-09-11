@@ -596,7 +596,9 @@ class ResearchResponse(BaseModel):
 class EventBriefRequest(BaseModel):
     """Event scope accepted by the LCEL research-brief workflow."""
 
-    ticker: str = Field(min_length=1, max_length=20)
+    ticker: Optional[str] = Field(default=None, min_length=1, max_length=20)
+
+    tickers: list[str] = Field(default_factory=list, max_length=4)
 
     event_type: Literal["earnings", "filing", "combined"] = "combined"
 
@@ -605,6 +607,8 @@ class EventBriefRequest(BaseModel):
     form_type: Optional[str] = Field(default=None, max_length=20)
 
     top_k: int = Field(default=6, ge=1, le=12)
+
+    focus: Optional[str] = Field(default=None, max_length=2000)
 
 
 class EventBriefContentResponse(BaseModel):
@@ -631,6 +635,8 @@ class EventBriefResponse(BaseModel):
     """Generated brief plus the exact evidence bundle used to create it."""
 
     ticker: str
+
+    tickers: list[str] = Field(default_factory=list)
 
     event_type: str
 
@@ -1015,12 +1021,17 @@ def event_research_brief(request: EventBriefRequest):
     """Run the LCEL retrieval, signal-enrichment, and generation chain."""
 
     try:
+        if not request.ticker and not request.tickers:
+            raise ValueError("At least one ticker is required.")
+
         return generate_event_brief(
             ticker=request.ticker,
+            tickers=request.tickers,
             event_type=request.event_type,
             fiscal_period=request.fiscal_period,
             form_type=request.form_type,
             top_k=request.top_k,
+            focus=request.focus,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

@@ -16,6 +16,24 @@
   --charcoal: #17211e;
 }
 
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #080e0c;
+  --surface: #111a17;
+  --surface-muted: #1b2722;
+  --ink: #edf4f0;
+  --muted: #98a8a2;
+  --line: #2d3b36;
+  --green: #62d4ad;
+  --green-soft: #18362c;
+  --blue: #69a8e1;
+  --blue-soft: #172d40;
+  --amber: #e1a64c;
+  --red: #ef777c;
+  --red-soft: #3b2023;
+  --charcoal: #070f0c;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -564,6 +582,13 @@ h3 {
   font-size: 13px;
   font-weight: 700;
 }
+
+html[data-theme="dark"] .score-track { background: #2b3934; }
+html[data-theme="dark"] .trend-grid { stroke: #2a3933; }
+html[data-theme="dark"] .case-table th,
+html[data-theme="dark"] .case-table td { border-bottom-color: #2a3933; }
+html[data-theme="dark"] .case-table tr.selected td { background: #1b2b25; }
+html[data-theme="dark"] .answer-block pre { color: #dce9e3; }
 
 .case-table-wrap > .empty-state {
   position: static;

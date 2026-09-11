@@ -68,6 +68,8 @@ given a document citation.
 State the event period or filing date explicitly. Separate company statements
 from interpretation, identify incomplete sentiment coverage, and put missing
 evidence in limitations. Do not provide a buy, sell, or hold recommendation.
+When multiple companies are supplied, compare them explicitly and attribute
+every claim and signal to the correct ticker; never blend company metrics.
 Use concise plain ASCII punctuation.
 """.strip()
 
@@ -101,18 +103,30 @@ or explain the gap in limitations instead of filling it from memory.
 
 
 def build_brief_question(
-    ticker: str,
+    ticker: str | None,
     event_type: str,
     fiscal_period: str | None = None,
     form_type: str | None = None,
+    tickers: list[str] | None = None,
+    focus: str | None = None,
 ) -> str:
     """Create a retrieval query that states the intended event scope."""
 
-    normalized_ticker = ticker.strip().upper()
+    normalized_tickers = []
+
+    for value in tickers or ([ticker] if ticker else []):
+        normalized = value.strip().upper()
+
+        if normalized and normalized not in normalized_tickers:
+            normalized_tickers.append(normalized)
+
     normalized_event = event_type.strip().lower()
 
-    if not normalized_ticker:
-        raise ValueError("Ticker cannot be empty.")
+    if not normalized_tickers:
+        raise ValueError("At least one ticker is required.")
+
+    if len(normalized_tickers) > 4:
+        raise ValueError("Event briefs support up to four tickers.")
 
     if normalized_event not in {"earnings", "filing", "combined"}:
         raise ValueError(
@@ -132,12 +146,31 @@ def build_brief_question(
             else "the latest SEC filing"
         )
     else:
-        event_scope = "the latest earnings call and SEC filings"
+        call_scope = (
+            f"the {fiscal_period} earnings call"
+            if fiscal_period
+            else "the latest earnings call"
+        )
+        filing_scope = (
+            f"the latest {form_type} SEC filing"
+            if form_type
+            else "the latest SEC filing"
+        )
+        event_scope = f"{call_scope} and {filing_scope}"
+
+    company_scope = ", ".join(normalized_tickers)
+    brief_type = "comparative event brief" if len(normalized_tickers) > 1 else "event brief"
+    focus_instruction = (
+        f" Prioritize this research focus: {focus.strip()}"
+        if focus and focus.strip()
+        else ""
+    )
 
     return (
-        f"Prepare an evidence-based event brief for {normalized_ticker} using "
+        f"Prepare an evidence-based {brief_type} for {company_scope} using "
         f"{event_scope}. Cover key developments, management or filing topic "
         "signals, guidance, risks, and stock performance versus SPY."
+        f"{focus_instruction}"
     )
 
 
@@ -257,6 +290,7 @@ def collect_brief_sentiment(
 
             if (
                 result.get("source_type") != "transcript"
+                and result.get("ticker") == ticker
                 and accession_number
                 and accession_number not in accession_numbers
             ):
@@ -276,15 +310,33 @@ def collect_brief_sentiment(
 def collect_brief_context(request: dict) -> dict:
     """Collect retrieval, market, and sentiment inputs for one LCEL run."""
 
-    ticker = str(request["ticker"]).strip().upper()
+    raw_tickers = request.get("tickers") or [request.get("ticker")]
+    tickers = []
+
+    for value in raw_tickers:
+        normalized = str(value or "").strip().upper()
+
+        if normalized and normalized not in tickers:
+            tickers.append(normalized)
+
+    if not tickers:
+        raise ValueError("At least one ticker is required.")
+
+    if len(tickers) > 4:
+        raise ValueError("Event briefs support up to four tickers.")
+
+    ticker = tickers[0]
     event_type = str(request.get("event_type", "combined")).lower()
     fiscal_period = request.get("fiscal_period")
     form_type = request.get("form_type")
+    focus = request.get("focus")
     question = build_brief_question(
         ticker=ticker,
+        tickers=tickers,
         event_type=event_type,
         fiscal_period=fiscal_period,
         form_type=form_type,
+        focus=focus,
     )
     source_type = {
         "earnings": "transcripts",
@@ -293,7 +345,7 @@ def collect_brief_context(request: dict) -> dict:
     }[event_type]
     evidence = collect_evidence(
         question=question,
-        ticker=ticker,
+        tickers=tickers,
         top_k=int(request.get("top_k", 6)),
         fiscal_period=(
             fiscal_period if event_type != "filing" else None
@@ -301,15 +353,27 @@ def collect_brief_context(request: dict) -> dict:
         form_type=form_type,
         source_type=source_type,
     )
-    sentiment_context = collect_brief_sentiment(
-        ticker=ticker,
-        event_type=event_type,
-        fiscal_period=fiscal_period,
-        retrieved_results=evidence["retrieved_results"],
+    company_sentiment = {
+        current_ticker: collect_brief_sentiment(
+            ticker=current_ticker,
+            event_type=event_type,
+            fiscal_period=fiscal_period,
+            retrieved_results=evidence["retrieved_results"],
+        )
+        for current_ticker in tickers
+    }
+    sentiment_context = (
+        company_sentiment[ticker]
+        if len(tickers) == 1
+        else {
+            "comparison": True,
+            "companies": company_sentiment,
+        }
     )
 
     return {
         "ticker": ticker,
+        "tickers": tickers,
         "event_type": event_type,
         "question": question,
         "document_context": build_context(evidence["retrieved_results"]),
@@ -392,6 +456,7 @@ def package_brief(context: dict) -> dict:
 
     return {
         "ticker": context["ticker"],
+        "tickers": context.get("tickers", [context["ticker"]]),
         "event_type": context["event_type"],
         "question": context["question"],
         "chain_version": BRIEF_CHAIN_VERSION,
@@ -437,18 +502,22 @@ def build_event_brief_chain(
 
 
 def generate_event_brief(
-    ticker: str,
+    ticker: str | None = None,
     event_type: Literal["earnings", "filing", "combined"] = "combined",
     fiscal_period: str | None = None,
     form_type: str | None = None,
     top_k: int = 6,
+    tickers: list[str] | None = None,
+    focus: str | None = None,
 ) -> dict:
     """Invoke the production LCEL event-brief workflow."""
 
     return build_event_brief_chain().invoke({
         "ticker": ticker,
+        "tickers": tickers,
         "event_type": event_type,
         "fiscal_period": fiscal_period,
         "form_type": form_type,
         "top_k": top_k,
+        "focus": focus,
     })

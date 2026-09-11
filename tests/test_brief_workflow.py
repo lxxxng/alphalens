@@ -11,6 +11,7 @@ from app.rag.brief_workflow import (
     EventBriefContent,
     build_brief_question,
     build_event_brief_chain,
+    collect_brief_context,
     compact_transcript_sentiment,
 )
 
@@ -54,6 +55,21 @@ class BriefWorkflowTests(unittest.TestCase):
         self.assertIn("2026Q4 earnings call", question)
         self.assertIn("versus SPY", question)
 
+    def test_question_builder_supports_comparison_and_focus(self):
+        question = build_brief_question(
+            ticker=None,
+            tickers=["wmt", "cost"],
+            event_type="combined",
+            fiscal_period="2026Q4",
+            form_type="10-K",
+            focus="Compare margin quality.",
+        )
+
+        self.assertIn("comparative event brief for WMT, COST", question)
+        self.assertIn("2026Q4 earnings call", question)
+        self.assertIn("latest 10-K SEC filing", question)
+        self.assertIn("Compare margin quality", question)
+
     def test_transcript_signal_selects_requested_period(self):
         timeline = {
             "ticker": "WMT",
@@ -84,6 +100,40 @@ class BriefWorkflowTests(unittest.TestCase):
 
         self.assertEqual(result["fiscal_period"], "2026Q3")
         self.assertEqual(result["overall"]["score"], 0.1)
+
+    def test_comparison_context_keeps_company_signals_separate(self):
+        evidence = {
+            "retrieved_results": [],
+            "market_context": [],
+        }
+
+        with patch(
+            "app.rag.brief_workflow.collect_evidence",
+            return_value=evidence,
+        ) as collect, patch(
+            "app.rag.brief_workflow.collect_brief_sentiment",
+            side_effect=lambda ticker, **_: {"ticker": ticker},
+        ):
+            result = collect_brief_context({
+                "tickers": ["wmt", "cost"],
+                "event_type": "combined",
+                "focus": "Compare margins.",
+                "top_k": 3,
+            })
+
+        self.assertEqual(result["tickers"], ["WMT", "COST"])
+        self.assertTrue(result["sentiment_context"]["comparison"])
+        self.assertEqual(
+            result["sentiment_context"]["companies"],
+            {
+                "WMT": {"ticker": "WMT"},
+                "COST": {"ticker": "COST"},
+            },
+        )
+        self.assertEqual(
+            collect.call_args.kwargs["tickers"],
+            ["WMT", "COST"],
+        )
 
     def test_lcel_chain_packages_structured_output(self):
         chain = build_event_brief_chain(
@@ -151,10 +201,51 @@ class BriefWorkflowTests(unittest.TestCase):
         self.assertEqual(response.json()["brief"]["headline"], "WMT event brief")
         generate.assert_called_once_with(
             ticker="wmt",
+            tickers=[],
             event_type="earnings",
             fiscal_period=None,
             form_type=None,
             top_k=6,
+            focus=None,
+        )
+
+    def test_brief_api_accepts_multiple_tickers(self):
+        result = {
+            "ticker": "WMT",
+            "tickers": ["WMT", "COST"],
+            "event_type": "combined",
+            "question": "Compare WMT and COST.",
+            "chain_version": "alphalens-event-brief-lcel-v1",
+            "model_name": "gpt-5-mini",
+            "brief": _brief("").model_dump(),
+            "market_context": [],
+            "sentiment_context": {},
+            "sources": [],
+        }
+
+        with patch(
+            "app.api.research.generate_event_brief",
+            return_value=result,
+        ) as generate:
+            response = TestClient(app).post(
+                "/api/briefs/generate",
+                json={
+                    "tickers": ["wmt", "cost"],
+                    "event_type": "combined",
+                    "focus": "Compare margins.",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["tickers"], ["WMT", "COST"])
+        generate.assert_called_once_with(
+            ticker=None,
+            tickers=["wmt", "cost"],
+            event_type="combined",
+            fiscal_period=None,
+            form_type=None,
+            top_k=6,
+            focus="Compare margins.",
         )
 
 

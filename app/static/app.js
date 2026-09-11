@@ -1,4 +1,5 @@
 const form = document.querySelector("#research-form");
+const appHeader = document.querySelector(".app-header");
 const answer = document.querySelector("#answer");
 const sources = document.querySelector("#sources");
 const sourceCount = document.querySelector("#source-count");
@@ -7,9 +8,15 @@ const marketSnapshots = document.querySelector("#market-snapshots");
 const marketCount = document.querySelector("#market-count");
 const statusPill = document.querySelector("#status-pill");
 const resultTitle = document.querySelector("#result-title");
+const resultScope = document.querySelector("#result-scope");
+const resultCloseButton = document.querySelector("#result-close");
+const workspaceTitle = document.querySelector("#workspace-title");
+const workspaceViewButtons = document.querySelectorAll("[data-workspace-view]");
+const marketView = document.querySelector("#market-view");
+const researchView = document.querySelector("#research-view");
 const submitButton = document.querySelector("#submit-button");
 const previewButton = document.querySelector("#preview-button");
-const briefButton = document.querySelector("#brief-button");
+const outputModeInputs = document.querySelectorAll("input[name='output_mode']");
 const copyButton = document.querySelector("#copy-button");
 const sampleButton = document.querySelector("#sample-button");
 const questionInput = document.querySelector("#question");
@@ -44,6 +51,7 @@ const chartEventCount = document.querySelector("#chart-event-count");
 const marketEvents = document.querySelector("#market-events");
 const briefOutput = document.querySelector("#brief-output");
 const signalSourceButtons = document.querySelectorAll("[data-signal-source]");
+const signalTickerControls = document.querySelector("#signal-ticker-controls");
 const signalSummary = document.querySelector("#signal-summary");
 const signalBody = document.querySelector(".signal-body");
 const signalPeriod = document.querySelector("#signal-period");
@@ -51,6 +59,7 @@ const signalScore = document.querySelector("#signal-score");
 const signalChange = document.querySelector("#signal-change");
 const signalCoverage = document.querySelector("#signal-coverage");
 const signalTrend = document.querySelector("#signal-trend");
+const signalTrendLegend = document.querySelector("#signal-trend-legend");
 const signalEmpty = document.querySelector("#signal-empty");
 const topicAudience = document.querySelector("#topic-audience");
 const topicSignals = document.querySelector("#topic-signals");
@@ -97,6 +106,9 @@ const initialTickerParameter = new URLSearchParams(
 const initialTickerMode = new URLSearchParams(
   window.location.search
 ).get("ticker_mode");
+const initialRunId = Number(
+  new URLSearchParams(window.location.search).get("run_id") || 0
+);
 let selectedTickers = (
   initialTickerParameter
     ?.split(",")
@@ -111,8 +123,17 @@ let selectedEventFilter = "all";
 let marketChartData = null;
 let marketChartRequest = 0;
 let selectedSignalSource = "transcripts";
+let selectedSignalTicker = (
+  new URLSearchParams(window.location.search).get("signal_ticker") || ""
+).toUpperCase();
+let compareSignalTickers = (
+  new URLSearchParams(window.location.search).get("signal_view") === "compare"
+);
+let signalDataByTicker = new Map();
 let signalRequest = 0;
 let lastCopyText = answer.textContent.trim();
+let resultAvailable = false;
+let resultReturnFocus = null;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const COMPANY_CHART_COLORS = ["#087f5b", "#6d4aff", "#0f8ea8", "#c24156"];
@@ -140,7 +161,60 @@ function setStatus(label, state = "") {
 function setBusy(isBusy) {
   submitButton.disabled = isBusy;
   previewButton.disabled = isBusy;
-  briefButton.disabled = isBusy;
+}
+
+function syncHeaderHeight() {
+  document.documentElement.style.setProperty(
+    "--header-height",
+    `${appHeader.offsetHeight}px`
+  );
+}
+
+function setWorkspaceView(view, scope = "") {
+  const showResearch = view === "research";
+
+  if (
+    showResearch
+    && marketView.hidden === false
+    && document.activeElement instanceof HTMLElement
+    && !researchOutput.contains(document.activeElement)
+  ) {
+    resultReturnFocus = document.activeElement;
+  }
+
+  if (scope) {
+    resultScope.textContent = scope;
+  }
+
+  marketView.hidden = showResearch;
+  researchView.hidden = !showResearch;
+  document.body.classList.toggle("workspace-research", showResearch);
+  workspaceTitle.textContent = showResearch ? "Research View" : "Market View";
+
+  for (const button of workspaceViewButtons) {
+    const isActive = button.dataset.workspaceView === view;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+    button.tabIndex = isActive ? 0 : -1;
+  }
+
+  document.querySelector("#research-tab")?.classList.toggle(
+    "has-result",
+    resultAvailable && !showResearch
+  );
+}
+
+function showResearchView(scope) {
+  resultAvailable = true;
+  setWorkspaceView("research", scope);
+}
+
+function showMarketView() {
+  setWorkspaceView("market");
+
+  if (resultReturnFocus?.isConnected) {
+    resultReturnFocus.focus({ preventScroll: true });
+  }
 }
 
 function renderOpenAIHealth(data) {
@@ -339,6 +413,7 @@ async function restoreSavedFilters(run) {
 
 async function openSavedResearchRun(runId) {
   setStatus("Loading", "loading");
+  showResearchView(`Saved research | Run ${runId}`);
 
   try {
     const response = await fetch(`/api/research/history/${runId}`);
@@ -349,19 +424,17 @@ async function openSavedResearchRun(runId) {
     }
 
     await restoreSavedFilters(data);
+    syncResearchRunUrl(data.run_id);
     resultTitle.textContent = `Saved Run #${data.run_id}`;
+    resultScope.textContent = `${(data.tickers || []).join(", ") || "Research"} | ${data.source_type}`;
     showPlainAnswer(data.answer);
     renderMarketContext(data.market_context || []);
     renderSources(data.sources || []);
     setStatus("History");
 
-    if (window.innerWidth <= 900) {
-      researchOutput.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }
   } catch (error) {
+    resultTitle.textContent = "History Error";
+    showPlainAnswer(error.message);
     setStatus("History error", "error");
   }
 }
@@ -455,6 +528,18 @@ function syncTickerUrl() {
     url.searchParams.set("ticker_mode", "auto");
   } else {
     url.searchParams.delete("ticker_mode");
+  }
+
+  window.history.replaceState({}, "", url);
+}
+
+function syncResearchRunUrl(runId = null) {
+  const url = new URL(window.location.href);
+
+  if (runId) {
+    url.searchParams.set("run_id", String(runId));
+  } else {
+    url.searchParams.delete("run_id");
   }
 
   window.history.replaceState({}, "", url);
@@ -587,6 +672,34 @@ function selectedSourceType() {
   return formDataSourceType(
     new FormData(form)
   );
+}
+
+function selectedOutputMode() {
+  return form.querySelector("input[name='output_mode']:checked")?.value
+    || "answer";
+}
+
+function setOutputMode(value) {
+  const input = form.querySelector(
+    `input[name="output_mode"][value="${value}"]`
+  );
+
+  if (input) {
+    input.checked = true;
+  }
+
+  updateOutputMode();
+}
+
+function updateOutputMode() {
+  const isBrief = selectedOutputMode() === "brief";
+  submitButton.textContent = isBrief ? "Generate Event Brief" : "Generate Answer";
+  fiscalPeriodSelect.options[0].textContent = isBrief
+    ? "Latest call"
+    : "Latest";
+  formTypeSelect.options[0].textContent = isBrief
+    ? "Any form (latest)"
+    : "Any";
 }
 
 function setSignalSource(value) {
@@ -744,6 +857,7 @@ async function loadFiltersForTicker(ticker) {
   );
 
   updateFilterState();
+  updateOutputMode();
   setStatus("Idle");
 }
 
@@ -826,8 +940,9 @@ function signalRecordLabel(record) {
   return [record.form_type, record.filing_date].filter(Boolean).join(" | ");
 }
 
-function renderSignalTrend(records, selectedIndex) {
+function renderSignalTrend(records, selectedIndex, ticker) {
   signalTrend.replaceChildren();
+  signalTrendLegend.replaceChildren();
   const points = records
     .map((record, index) => ({
       index,
@@ -854,7 +969,7 @@ function renderSignalTrend(records, selectedIndex) {
   signalTrend.setAttribute("viewBox", `0 0 ${width} ${height}`);
   signalTrend.setAttribute(
     "aria-label",
-    `${primaryTicker()} sentiment history from ${points[0].label} to ${points.at(-1).label}`
+    `${ticker} sentiment history from ${points[0].label} to ${points.at(-1).label}`
   );
 
   for (const score of [1, 0.5, 0, -0.5, -1]) {
@@ -921,6 +1036,14 @@ function renderSignalTrend(records, selectedIndex) {
       : record.filing_date;
     signalTrend.appendChild(label);
   }
+
+  const legend = document.createElement("span");
+  const swatch = document.createElement("i");
+  swatch.style.backgroundColor = "#6842c2";
+  const legendLabel = document.createElement("strong");
+  legendLabel.textContent = ticker;
+  legend.append(swatch, legendLabel);
+  signalTrendLegend.appendChild(legend);
 }
 
 function renderTopicSignals(topics) {
@@ -966,7 +1089,7 @@ function renderTopicSignals(topics) {
   }
 }
 
-function renderSentimentSignals(data) {
+function renderSentimentSignals(data, ticker) {
   const records = selectedSignalSource === "transcripts"
     ? (data.calls || [])
     : (data.filings || []);
@@ -975,7 +1098,9 @@ function renderSentimentSignals(data) {
     signalSummary.hidden = true;
     signalBody.hidden = true;
     signalEmpty.hidden = false;
-    signalEmpty.textContent = `No scored ${selectedSignalSource === "transcripts" ? "calls" : "filings"} found for ${primaryTicker()}.`;
+    signalTrend.replaceChildren();
+    signalTrendLegend.replaceChildren();
+    signalEmpty.textContent = `No scored ${selectedSignalSource === "transcripts" ? "calls" : "filings"} found for ${ticker}.`;
     return;
   }
 
@@ -1023,16 +1148,360 @@ function renderSentimentSignals(data) {
   topicAudience.textContent = selectedSignalSource === "transcripts"
     ? "Management commentary"
     : "SEC narrative sections";
-  renderSignalTrend(records, selectedIndex);
+  renderSignalTrend(records, selectedIndex, ticker);
   renderTopicSignals(current.topics || []);
 }
 
+function activeSignalTicker() {
+  if (selectedTickers.includes(selectedSignalTicker)) {
+    return selectedSignalTicker;
+  }
+
+  selectedSignalTicker = primaryTicker();
+  return selectedSignalTicker;
+}
+
+function signalRecords(data) {
+  return selectedSignalSource === "transcripts"
+    ? (data?.calls || [])
+    : (data?.filings || []);
+}
+
+function selectedSignalIndex(records) {
+  if (selectedSignalSource !== "transcripts" || !fiscalPeriodSelect.value) {
+    return records.length - 1;
+  }
+
+  const match = records.findIndex(
+    (record) => record.fiscal_period === fiscalPeriodSelect.value
+  );
+  return match >= 0 ? match : records.length - 1;
+}
+
+function signalAggregate(record) {
+  if (!record) {
+    return {};
+  }
+
+  return selectedSignalSource === "transcripts"
+    ? transcriptManagementAggregate(record)
+    : (record.overall || {});
+}
+
+function signalTickerColor(ticker) {
+  const index = Math.max(0, selectedTickers.indexOf(ticker));
+  return COMPANY_CHART_COLORS[index % COMPANY_CHART_COLORS.length];
+}
+
+function syncSignalViewUrl() {
+  const url = new URL(window.location.href);
+
+  if (compareSignalTickers) {
+    url.searchParams.set("signal_view", "compare");
+    url.searchParams.delete("signal_ticker");
+  } else {
+    url.searchParams.delete("signal_view");
+    url.searchParams.set("signal_ticker", activeSignalTicker());
+  }
+
+  window.history.replaceState({}, "", url);
+}
+
+function renderSignalTickerControls() {
+  signalTickerControls.replaceChildren();
+  signalTickerControls.hidden = selectedTickers.length <= 1;
+
+  if (selectedTickers.length <= 1) {
+    selectedSignalTicker = primaryTicker();
+    compareSignalTickers = false;
+    return;
+  }
+
+  for (const ticker of selectedTickers) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = ticker;
+    button.classList.toggle(
+      "active",
+      !compareSignalTickers && ticker === activeSignalTicker()
+    );
+    button.setAttribute(
+      "aria-pressed",
+      String(!compareSignalTickers && ticker === activeSignalTicker())
+    );
+    button.addEventListener("click", () => {
+      selectedSignalTicker = ticker;
+      compareSignalTickers = false;
+      syncSignalViewUrl();
+      renderSentimentCollection();
+    });
+    signalTickerControls.appendChild(button);
+  }
+
+  const compareButton = document.createElement("button");
+  compareButton.type = "button";
+  compareButton.className = `compare${compareSignalTickers ? " active" : ""}`;
+  compareButton.textContent = "Compare";
+  compareButton.setAttribute("aria-pressed", String(compareSignalTickers));
+  compareButton.addEventListener("click", () => {
+    compareSignalTickers = true;
+    syncSignalViewUrl();
+    renderSentimentCollection();
+  });
+  signalTickerControls.appendChild(compareButton);
+}
+
+function renderSignalComparisonTrend(entries) {
+  signalTrend.replaceChildren();
+  signalTrendLegend.replaceChildren();
+  const series = entries.map(([ticker, data]) => ({
+    ticker,
+    color: signalTickerColor(ticker),
+    points: signalRecords(data)
+      .map((record) => ({
+        key: selectedSignalSource === "transcripts"
+          ? record.fiscal_period
+          : record.filing_date,
+        label: signalRecordLabel(record),
+        score: signalAggregate(record).score,
+      }))
+      .filter((point) => point.key && Number.isFinite(point.score)),
+  })).filter((item) => item.points.length);
+
+  if (!series.length) {
+    return;
+  }
+
+  const keys = [...new Set(
+    series.flatMap((item) => item.points.map((point) => point.key))
+  )].sort();
+  const keyIndex = new Map(keys.map((key, index) => [key, index]));
+  const width = 540;
+  const height = 205;
+  const margin = { top: 14, right: 14, bottom: 28, left: 31 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const x = (key) => margin.left + (
+    keys.length === 1
+      ? plotWidth / 2
+      : keyIndex.get(key) * plotWidth / (keys.length - 1)
+  );
+  const y = (score) => margin.top + (1 - score) * plotHeight / 2;
+  signalTrend.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  signalTrend.setAttribute(
+    "aria-label",
+    `Sentiment comparison for ${series.map((item) => item.ticker).join(", ")}`
+  );
+
+  for (const score of [1, 0.5, 0, -0.5, -1]) {
+    signalTrend.appendChild(svgElement("line", {
+      x1: margin.left,
+      x2: width - margin.right,
+      y1: y(score),
+      y2: y(score),
+      class: score === 0 ? "signal-zero-line" : "signal-grid-line",
+    }));
+
+    if ([1, 0, -1].includes(score)) {
+      const label = svgElement("text", {
+        x: margin.left - 7,
+        y: y(score) + 3,
+        class: "signal-axis-label",
+        "text-anchor": "end",
+      });
+      label.textContent = score > 0 ? "+1" : String(score);
+      signalTrend.appendChild(label);
+    }
+  }
+
+  for (const item of series) {
+    const path = item.points.map((point, index) => {
+      const command = index === 0 ? "M" : "L";
+      return `${command}${x(point.key).toFixed(2)},${y(point.score).toFixed(2)}`;
+    }).join(" ");
+    const pathElement = svgElement("path", {
+      d: path,
+      class: "signal-line",
+    });
+    pathElement.style.stroke = item.color;
+    signalTrend.appendChild(pathElement);
+
+    for (const point of item.points) {
+      const marker = svgElement("circle", {
+        cx: x(point.key),
+        cy: y(point.score),
+        r: 3.5,
+        class: "signal-point",
+      });
+      marker.style.fill = item.color;
+      const title = svgElement("title");
+      title.textContent = `${item.ticker} | ${point.label}: ${formatSentimentScore(point.score)}`;
+      marker.appendChild(title);
+      signalTrend.appendChild(marker);
+    }
+
+    const legend = document.createElement("span");
+    const swatch = document.createElement("i");
+    swatch.style.backgroundColor = item.color;
+    const label = document.createElement("strong");
+    label.textContent = item.ticker;
+    legend.append(swatch, label);
+    signalTrendLegend.appendChild(legend);
+  }
+
+  for (const key of [...new Set([keys[0], keys.at(-1)])]) {
+    const label = svgElement("text", {
+      x: x(key),
+      y: height - 7,
+      class: "signal-axis-label",
+      "text-anchor": key === keys[0] ? "start" : "end",
+    });
+    label.textContent = key;
+    signalTrend.appendChild(label);
+  }
+}
+
+function renderTopicComparison(currentEntries) {
+  topicSignals.replaceChildren();
+  const topics = new Map();
+
+  for (const entry of currentEntries) {
+    for (const topic of entry.record.topics || []) {
+      if (!topics.has(topic.topic_key)) {
+        topics.set(topic.topic_key, {
+          label: topic.topic_label,
+          totalItems: 0,
+          values: new Map(),
+        });
+      }
+
+      const aggregate = topics.get(topic.topic_key);
+      aggregate.totalItems += topic.eligible_items || 0;
+      aggregate.values.set(entry.ticker, topic);
+    }
+  }
+
+  const ranked = [...topics.values()]
+    .sort((left, right) => right.totalItems - left.totalItems)
+    .slice(0, 6);
+
+  if (!ranked.length) {
+    renderTopicSignals([]);
+    return;
+  }
+
+  for (const topic of ranked) {
+    const row = document.createElement("div");
+    row.className = "topic-comparison-row";
+    const identity = document.createElement("div");
+    identity.className = "topic-label";
+    const label = document.createElement("strong");
+    label.textContent = topic.label;
+    const detail = document.createElement("small");
+    detail.textContent = `${topic.totalItems} passages across companies`;
+    identity.append(label, detail);
+    const values = document.createElement("div");
+    values.className = "topic-comparison-values";
+
+    currentEntries.forEach((entry) => {
+      const value = document.createElement("span");
+      value.className = "topic-comparison-value";
+      const swatch = document.createElement("i");
+      swatch.style.backgroundColor = signalTickerColor(entry.ticker);
+      const text = document.createElement("span");
+      const score = topic.values.get(entry.ticker)?.score;
+      text.textContent = `${entry.ticker} `;
+      const scoreElement = document.createElement("strong");
+      scoreElement.textContent = formatSentimentScore(score);
+      text.appendChild(scoreElement);
+      value.append(swatch, text);
+      values.appendChild(value);
+    });
+
+    row.append(identity, values);
+    topicSignals.appendChild(row);
+  }
+}
+
+function renderSignalComparison(entries) {
+  const currentEntries = entries.map(([ticker, data]) => {
+    const records = signalRecords(data);
+    const index = selectedSignalIndex(records);
+    const record = records[index];
+    const previous = index > 0 ? records[index - 1] : null;
+    const aggregate = signalAggregate(record);
+    const previousAggregate = signalAggregate(previous);
+    const change = (
+      Number.isFinite(aggregate.score)
+      && Number.isFinite(previousAggregate.score)
+    ) ? aggregate.score - previousAggregate.score : null;
+    return { ticker, record, aggregate, change };
+  }).filter((entry) => entry.record);
+
+  if (!currentEntries.length) {
+    renderSentimentSignals({}, selectedTickers.join(", "));
+    return;
+  }
+
+  const scored = currentEntries.reduce(
+    (total, entry) => total + (entry.aggregate.scored_items || 0),
+    0
+  );
+  const eligible = currentEntries.reduce(
+    (total, entry) => total + (entry.aggregate.eligible_items || 0),
+    0
+  );
+  const changes = currentEntries
+    .map((entry) => entry.change)
+    .filter(Number.isFinite);
+  const averageChange = changes.length
+    ? changes.reduce((total, value) => total + value, 0) / changes.length
+    : null;
+
+  signalSummary.hidden = false;
+  signalBody.hidden = false;
+  signalEmpty.hidden = true;
+  signalPeriod.textContent = selectedSignalSource === "transcripts"
+    ? (fiscalPeriodSelect.value || "Latest call per company")
+    : `Latest ${formTypeSelect.value || "SEC filing"} per company`;
+  signalScore.textContent = `${currentEntries.length} companies`;
+  signalScore.className = "";
+  signalChange.textContent = Number.isFinite(averageChange)
+    ? `${formatSentimentScore(averageChange)} average`
+    : "No prior comparison";
+  setSentimentClass(signalChange, averageChange);
+  signalCoverage.textContent = eligible
+    ? `${(scored / eligible * 100).toFixed(0)}% (${scored}/${eligible})`
+    : "--";
+  topicAudience.textContent = selectedSignalSource === "transcripts"
+    ? "Latest management comparison"
+    : "Latest SEC narrative comparison";
+  renderSignalComparisonTrend(entries);
+  renderTopicComparison(currentEntries);
+}
+
+function renderSentimentCollection() {
+  renderSignalTickerControls();
+  const entries = selectedTickers
+    .map((ticker) => [ticker, signalDataByTicker.get(ticker)])
+    .filter(([, data]) => data);
+
+  if (compareSignalTickers && entries.length > 1) {
+    renderSignalComparison(entries);
+    return;
+  }
+
+  const ticker = activeSignalTicker();
+  renderSentimentSignals(signalDataByTicker.get(ticker) || {}, ticker);
+}
+
 async function loadSentimentSignals() {
-  const ticker = primaryTicker();
+  const tickers = [...selectedTickers];
   const requestId = ++signalRequest;
 
-  if (!ticker) {
-    renderSentimentSignals({});
+  if (!tickers.length) {
+    signalDataByTicker = new Map();
+    renderSentimentCollection();
     return;
   }
 
@@ -1043,24 +1512,29 @@ async function loadSentimentSignals() {
   signalEmpty.hidden = true;
 
   try {
-    const params = new URLSearchParams({ ticker });
-
-    if (selectedSignalSource === "filings" && formTypeSelect.value) {
-      params.set("form_type", formTypeSelect.value);
-    }
-
     const endpoint = selectedSignalSource === "transcripts"
       ? "/api/sentiment/transcripts"
       : "/api/sentiment/filings";
-    const response = await fetch(`${endpoint}?${params}`);
-    const data = await response.json();
+    const results = await Promise.all(tickers.map(async (ticker) => {
+      const params = new URLSearchParams({ ticker });
 
-    if (!response.ok) {
-      throw new Error(data.detail || "Sentiment request failed.");
-    }
+      if (selectedSignalSource === "filings" && formTypeSelect.value) {
+        params.set("form_type", formTypeSelect.value);
+      }
+
+      const response = await fetch(`${endpoint}?${params}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || `Sentiment request failed for ${ticker}.`);
+      }
+
+      return [ticker, data];
+    }));
 
     if (requestId === signalRequest) {
-      renderSentimentSignals(data);
+      signalDataByTicker = new Map(results);
+      renderSentimentCollection();
     }
   } catch (error) {
     if (requestId !== signalRequest) {
@@ -1069,6 +1543,8 @@ async function loadSentimentSignals() {
 
     signalSummary.hidden = true;
     signalBody.hidden = true;
+    signalTrend.replaceChildren();
+    signalTrendLegend.replaceChildren();
     signalEmpty.hidden = false;
     signalEmpty.textContent = error.message;
   }
@@ -1868,6 +2344,7 @@ sampleButton.addEventListener("click", async () => {
   syncTickerUrl();
   renderTickerPicker();
   setSourceType(sample.source_type);
+  setOutputMode("answer");
 
   if (["transcripts", "filings"].includes(sample.source_type)) {
     setSignalSource(sample.source_type);
@@ -2010,6 +2487,10 @@ for (const radio of form.querySelectorAll("input[name='source_type']")) {
   });
 }
 
+for (const input of outputModeInputs) {
+  input.addEventListener("change", updateOutputMode);
+}
+
 copyButton.addEventListener("click", async () => {
   const text = lastCopyText;
 
@@ -2025,18 +2506,60 @@ copyButton.addEventListener("click", async () => {
   }
 });
 
+resultCloseButton.addEventListener("click", showMarketView);
+
+for (const button of workspaceViewButtons) {
+  button.addEventListener("click", () => {
+    setWorkspaceView(button.dataset.workspaceView);
+  });
+
+  button.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextView = button.dataset.workspaceView === "market"
+      ? "research"
+      : "market";
+    setWorkspaceView(nextView);
+    document.querySelector(`[data-workspace-view='${nextView}']`)?.focus();
+  });
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !researchView.hidden) {
+    showMarketView();
+  }
+});
+
 // Metadata and provider health are independent startup checks. Running both
 // immediately makes the console ready sooner and keeps one failure from
 // hiding the other.
 renderTickerPicker();
-initializeMetadata();
+updateOutputMode();
+syncHeaderHeight();
+setWorkspaceView("market");
+const metadataInitialization = initializeMetadata();
 checkOpenAIHealth();
 loadResearchHistory();
+
+if (Number.isInteger(initialRunId) && initialRunId > 0) {
+  metadataInitialization.then(() => openSavedResearchRun(initialRunId));
+}
 
 openAIHealthButton.addEventListener("click", checkOpenAIHealth);
 historyRefreshButton.addEventListener("click", loadResearchHistory);
 
+if ("ResizeObserver" in window) {
+  new ResizeObserver(syncHeaderHeight).observe(appHeader);
+} else {
+  window.addEventListener("resize", syncHeaderHeight);
+}
+
 async function runResearchRequest(mode) {
+  syncResearchRunUrl();
+
   if (tickerAutoInput.checked) {
     await resolveTickersFromQuestion();
   }
@@ -2046,9 +2569,15 @@ async function runResearchRequest(mode) {
   );
 
   const isPreview = mode === "preview";
+  const scope = [
+    selectedTickers.join(", ") || "Auto-detected company",
+    payload.source_type,
+    isPreview ? "Evidence preview" : "Generated answer",
+  ].join(" | ");
 
   setBusy(true);
   setStatus("Running", "loading");
+  showResearchView(scope);
   resultTitle.textContent = isPreview ? "Previewing" : "Searching";
   showPlainAnswer(isPreview
     ? "Retrieving evidence only..."
@@ -2096,13 +2625,10 @@ async function runResearchRequest(mode) {
     setStatus("Done");
 
     if (!isPreview && data.run_id) {
+      syncResearchRunUrl(data.run_id);
       loadResearchHistory();
     }
 
-    researchOutput.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
   } catch (error) {
     resultTitle.textContent = "Error";
     showPlainAnswer(error.message);
@@ -2113,16 +2639,20 @@ async function runResearchRequest(mode) {
 }
 
 async function runEventBrief() {
+  syncResearchRunUrl();
+
   if (tickerAutoInput.checked) {
     await resolveTickersFromQuestion();
   }
 
+  const tickers = [...selectedTickers];
   const ticker = primaryTicker();
 
   if (!ticker) {
     resultTitle.textContent = "Ticker required";
     showPlainAnswer("Select a company or mention one in the question before generating a brief.");
     setStatus("Needs ticker", "error");
+    showResearchView("Event brief | Ticker required");
     return;
   }
 
@@ -2131,9 +2661,10 @@ async function runEventBrief() {
     ? "earnings"
     : (sourceType === "filings" ? "filing" : "combined");
   const payload = {
-    ticker,
+    tickers,
     event_type: eventType,
     top_k: Math.min(12, Number(form.elements.top_k.value || 6)),
+    focus: questionInput.value.trim(),
   };
 
   if (eventType !== "filing" && fiscalPeriodSelect.value) {
@@ -2146,6 +2677,7 @@ async function runEventBrief() {
 
   setBusy(true);
   setStatus("Running", "loading");
+  showResearchView(`${tickers.join(", ")} | ${eventType} | Structured event brief`);
   resultTitle.textContent = "Building Event Brief";
   showPlainAnswer("Collecting event evidence, market reaction, and sentiment signals...");
   renderMarketContext([]);
@@ -2163,15 +2695,11 @@ async function runEventBrief() {
       throw new Error(data.detail || "Event brief request failed.");
     }
 
-    resultTitle.textContent = `${data.ticker} Event Brief`;
+    resultTitle.textContent = `${(data.tickers || [data.ticker]).join(" / ")} Event Brief`;
     renderEventBrief(data.brief);
     renderMarketContext(data.market_context || []);
     renderSources(data.sources || []);
     setStatus("Done");
-    researchOutput.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
   } catch (error) {
     resultTitle.textContent = "Brief Error";
     showPlainAnswer(error.message);
@@ -2184,11 +2712,13 @@ async function runEventBrief() {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  await runResearchRequest("answer");
+  if (selectedOutputMode() === "brief") {
+    await runEventBrief();
+  } else {
+    await runResearchRequest("answer");
+  }
 });
 
 previewButton.addEventListener("click", async () => {
   await runResearchRequest("preview");
 });
-
-briefButton.addEventListener("click", runEventBrief);

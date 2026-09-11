@@ -92,7 +92,8 @@
 .global-nav .nav-link.active { border-bottom-color: #5fd0aa; }
 
 .global-nav .nav-action,
-.global-nav .connection-status {
+.global-nav .connection-status,
+.global-nav .theme-toggle {
   display: inline-flex;
   min-width: 118px;
   min-height: 34px;
@@ -112,11 +113,44 @@
 }
 
 .global-nav .connection-status { min-width: 142px; }
+.global-nav .theme-toggle { min-width: 86px; }
 
 .global-nav .nav-action:hover,
-.global-nav .connection-status:hover {
+.global-nav .connection-status:hover,
+.global-nav .theme-toggle:hover {
   border-color: #719288;
   color: #ffffff;
+}
+
+.theme-switch {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  flex: 0 0 28px;
+  border: 1px solid #60736c;
+  border-radius: 999px;
+  background: #22312c;
+}
+
+.theme-switch span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #b8c6c1;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.theme-toggle[aria-pressed="true"] .theme-switch {
+  border-color: #7662ae;
+  background: #30254c;
+}
+
+.theme-toggle[aria-pressed="true"] .theme-switch span {
+  background: #c8b8f5;
+  transform: translateX(12px);
 }
 
 @media (max-width: 700px) {
@@ -129,10 +163,12 @@
   }
 
   .global-nav {
+    display: grid;
     width: 100%;
     min-height: 38px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-self: auto;
-    overflow-x: auto;
+    overflow-x: visible;
   }
 
   .global-nav .nav-link {
@@ -141,10 +177,15 @@
   }
 
   .global-nav .nav-action,
-  .global-nav .connection-status {
-    min-width: 134px;
-    margin-left: auto;
+  .global-nav .connection-status,
+  .global-nav .theme-toggle {
+    width: 100%;
+    min-width: 0;
+    margin: 4px 0 0;
   }
+
+  .global-nav .theme-toggle { grid-column: 1; }
+  .global-nav .connection-status { grid-column: 2 / -1; }
 }
 
 @media (max-width: 440px) {
@@ -155,7 +196,8 @@
   }
 
   .global-nav .nav-action,
-  .global-nav .connection-status {
+  .global-nav .connection-status,
+  .global-nav .theme-toggle {
     width: 100%;
     min-width: 0;
     grid-column: 1 / -1;

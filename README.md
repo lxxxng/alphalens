@@ -557,6 +557,22 @@ Generate an earnings, filing, or combined event brief:
 }
 ```
 
+Comparative briefs accept up to four tickers and use the supplied focus to
+steer retrieval and structured generation without blending company signals:
+
+```json
+{
+  "tickers": ["WMT", "COST"],
+  "event_type": "combined",
+  "focus": "Compare margin quality and management outlook.",
+  "top_k": 3
+}
+```
+
+Without `fiscal_period`, earnings scope means the latest stored call for each
+company. Filing scope means the latest filing matching `form_type`, or the
+latest SEC filing when no form is selected.
+
 Send the payload to:
 
 ```text
@@ -584,8 +600,16 @@ http://127.0.0.1:8000
 The research workspace keeps the price and event chart as its primary view.
 The supporting signal monitor can switch between management-call and SEC
 narrative sentiment, compare each score with the prior event, and show current
-topic-level polarity and coverage. `Generate Event Brief` renders the LCEL
-workflow's structured output alongside its market facts and source evidence.
+topic-level polarity and coverage. With multiple selected companies, ticker
+tabs retain company-specific detail while Compare overlays sentiment histories
+and displays topic scores side by side. `Generate Event Brief` renders the
+LCEL workflow's structured output alongside its market facts and source
+evidence. The attached right-hand query rail drives a two-view analytical
+canvas: requests switch directly to Research, while the Market tab preserves
+the price, event, and sentiment monitors without losing the answer. Saved runs
+can also be opened directly with `?run_id=<id>`. A persisted header toggle
+switches every surface in the Research and Evaluation workspaces between light
+and dark themes.
 
 The UI loads its dropdown choices and automatic company matches from metadata
 endpoints:
