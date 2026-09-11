@@ -70,6 +70,7 @@ Get-Content -Raw db\sql\008_earnings_transcripts.sql | docker exec -i alphalens-
 Get-Content -Raw db\sql\009_research_runs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\010_transcript_sentiment.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\011_filing_sentiment.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
+Get-Content -Raw db\sql\012_event_briefs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 ```
 
 ## 6. Run all pipelines in order

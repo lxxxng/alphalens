@@ -100,7 +100,10 @@ from app.rag.generator import (
     answer_question,
     preview_evidence,
 )
-from app.rag.brief_workflow import generate_event_brief
+from app.rag.brief_workflow import (
+    BRIEF_CHAIN_VERSION,
+    generate_event_brief,
+)
 
 from app.rag.company_resolver import (
     resolve_tickers,
@@ -126,6 +129,16 @@ from app.services.research_history import (
     get_research_run,
     list_research_runs,
     save_research_run,
+)
+
+from app.services.event_brief_history import (
+    build_event_brief_cache_key,
+    delete_event_brief,
+    find_cached_event_brief,
+    get_event_brief,
+    get_latest_event_fingerprint,
+    list_event_briefs,
+    save_event_brief,
 )
 
 from app.services.transcripts import get_transcript_detail
@@ -610,6 +623,8 @@ class EventBriefRequest(BaseModel):
 
     focus: Optional[str] = Field(default=None, max_length=2000)
 
+    refresh: bool = False
+
 
 class EventBriefContentResponse(BaseModel):
     """Structured sections produced by the grounded brief model."""
@@ -634,6 +649,10 @@ class EventBriefContentResponse(BaseModel):
 class EventBriefResponse(BaseModel):
     """Generated brief plus the exact evidence bundle used to create it."""
 
+    brief_id: Optional[int] = None
+
+    cached: bool = False
+
     ticker: str
 
     tickers: list[str] = Field(default_factory=list)
@@ -653,6 +672,54 @@ class EventBriefResponse(BaseModel):
     sentiment_context: dict
 
     sources: list[ResearchSource] = Field(default_factory=list)
+
+
+class EventBriefSummary(BaseModel):
+    """One lightweight entry in saved event-brief history."""
+
+    brief_id: int
+
+    tickers: list[str] = Field(default_factory=list)
+
+    event_type: str
+
+    headline: str
+
+    source_count: int
+
+    chain_version: str
+
+    model_name: str
+
+    created_at: str
+
+
+class EventBriefHistoryResponse(BaseModel):
+    """Recent saved event briefs."""
+
+    briefs: list[EventBriefSummary]
+
+
+class SavedEventBriefDetail(EventBriefResponse):
+    """Complete immutable snapshot of one generated event brief."""
+
+    fiscal_period: Optional[str] = None
+
+    form_type: Optional[str] = None
+
+    top_k: int
+
+    focus: Optional[str] = None
+
+    created_at: str
+
+
+class DeleteEventBriefResponse(BaseModel):
+    """Confirmation returned after deleting a saved event brief."""
+
+    brief_id: int
+
+    deleted: bool
 
 
 class ResearchRunSummary(BaseModel):
@@ -1024,7 +1091,30 @@ def event_research_brief(request: EventBriefRequest):
         if not request.ticker and not request.tickers:
             raise ValueError("At least one ticker is required.")
 
-        return generate_event_brief(
+        request_data = request.model_dump(exclude={"refresh"})
+        event_fingerprint = {}
+        cache_key = None
+
+        try:
+            event_fingerprint = get_latest_event_fingerprint(request_data)
+            cache_key = build_event_brief_cache_key(
+                request_data=request_data,
+                event_fingerprint=event_fingerprint,
+                chain_version=BRIEF_CHAIN_VERSION,
+            )
+
+            if not request.refresh:
+                cached = find_cached_event_brief(cache_key)
+
+                if cached:
+                    cached["cached"] = True
+                    return cached
+        except Exception as cache_error:
+            # Generation remains available before migration 012 is applied or
+            # during a temporary persistence outage.
+            print(f"[BRIEF CACHE WARNING] {cache_error}")
+
+        result = generate_event_brief(
             ticker=request.ticker,
             tickers=request.tickers,
             event_type=request.event_type,
@@ -1033,6 +1123,20 @@ def event_research_brief(request: EventBriefRequest):
             top_k=request.top_k,
             focus=request.focus,
         )
+
+        if cache_key:
+            try:
+                result["brief_id"] = save_event_brief(
+                    request_data=request_data,
+                    result=result,
+                    cache_key=cache_key,
+                    event_fingerprint=event_fingerprint,
+                )
+            except Exception as history_error:
+                print(f"[BRIEF HISTORY WARNING] {history_error}")
+
+        result["cached"] = False
+        return result
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
@@ -1041,6 +1145,79 @@ def event_research_brief(request: EventBriefRequest):
             status_code=500,
             detail="AlphaLens could not generate the event brief.",
         ) from error
+
+
+@router.get(
+    "/briefs/history",
+    response_model=EventBriefHistoryResponse,
+    summary="List recent saved event briefs",
+)
+def event_brief_history(
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    """Return saved brief summaries without their large evidence payloads."""
+
+    try:
+        return {"briefs": list_event_briefs(limit=limit)}
+    except Exception as error:
+        print(f"[API ERROR] /api/briefs/history: {error}")
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not load event brief history.",
+        ) from error
+
+
+@router.get(
+    "/briefs/history/{brief_id}",
+    response_model=SavedEventBriefDetail,
+    summary="Open a saved event brief",
+)
+def event_brief_history_detail(brief_id: int):
+    """Return one saved brief and its original evidence snapshot."""
+
+    try:
+        result = get_event_brief(brief_id=brief_id)
+    except Exception as error:
+        print(f"[API ERROR] /api/briefs/history/{brief_id}: {error}")
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not load the saved event brief.",
+        ) from error
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Event brief {brief_id} was not found.",
+        )
+
+    result["cached"] = True
+    return result
+
+
+@router.delete(
+    "/briefs/history/{brief_id}",
+    response_model=DeleteEventBriefResponse,
+    summary="Delete a saved event brief",
+)
+def event_brief_history_delete(brief_id: int):
+    """Delete one saved event-brief snapshot."""
+
+    try:
+        deleted = delete_event_brief(brief_id=brief_id)
+    except Exception as error:
+        print(f"[API ERROR] DELETE /api/briefs/history/{brief_id}: {error}")
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not delete the saved event brief.",
+        ) from error
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Event brief {brief_id} was not found.",
+        )
+
+    return {"brief_id": brief_id, "deleted": True}
 
 
 # ============================================================

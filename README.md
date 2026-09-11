@@ -69,6 +69,7 @@ Get-Content db\sql\008_earnings_transcripts.sql | docker exec -i alphalens-postg
 Get-Content db\sql\009_research_runs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\010_transcript_sentiment.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\011_filing_sentiment.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\012_event_briefs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -581,9 +582,17 @@ POST /api/briefs/generate
 
 The response separates the executive summary, developments, topic signals,
 market reaction, risks, watch items, and limitations while returning the exact
-market, sentiment, and citation records used. This endpoint performs the full
-workflow synchronously. Scheduled triggering and brief persistence are later
-pipeline steps, not behavior implied by this endpoint.
+market, sentiment, and citation records used. Successful results are persisted
+as immutable snapshots. An unchanged event scope reuses its newest saved brief;
+send `"refresh": true` to generate and save a new snapshot intentionally.
+
+Saved brief endpoints:
+
+```text
+GET    /api/briefs/history
+GET    /api/briefs/history/{brief_id}
+DELETE /api/briefs/history/{brief_id}
+```
 
 Run the local research UI:
 
@@ -606,7 +615,9 @@ and displays topic scores side by side. A fixed Latest Event Brief band beneath
 the chart generates the LCEL workflow from each selected company's latest
 earnings call and SEC filing. Its executive summary stays visible while the
 detailed sections and evidence remain expandable, keeping sentiment close by
-even for multi-company comparisons. On desktop, Pin Chart converts the market
+even for multi-company comparisons. Recent Briefs restores the original
+ticker scope, generated content, and evidence without calling OpenAI again.
+On desktop, Pin Chart converts the market
 chart into a compact sticky monitor while the brief and sentiment sections
 scroll beneath it. The attached right-hand query rail is reserved for ad hoc
 questions; its generated answers switch directly to Research without losing

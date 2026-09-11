@@ -188,10 +188,24 @@ class BriefWorkflowTests(unittest.TestCase):
             "sources": [],
         }
 
-        with patch(
-            "app.api.research.generate_event_brief",
-            return_value=result,
-        ) as generate:
+        with (
+            patch(
+                "app.api.research.generate_event_brief",
+                return_value=result,
+            ) as generate,
+            patch(
+                "app.api.research.get_latest_event_fingerprint",
+                return_value={"companies": []},
+            ),
+            patch(
+                "app.api.research.find_cached_event_brief",
+                return_value=None,
+            ),
+            patch(
+                "app.api.research.save_event_brief",
+                return_value=1,
+            ),
+        ):
             response = TestClient(app).post(
                 "/api/briefs/generate",
                 json={"ticker": "wmt", "event_type": "earnings"},
@@ -223,10 +237,24 @@ class BriefWorkflowTests(unittest.TestCase):
             "sources": [],
         }
 
-        with patch(
-            "app.api.research.generate_event_brief",
-            return_value=result,
-        ) as generate:
+        with (
+            patch(
+                "app.api.research.generate_event_brief",
+                return_value=result,
+            ) as generate,
+            patch(
+                "app.api.research.get_latest_event_fingerprint",
+                return_value={"companies": []},
+            ),
+            patch(
+                "app.api.research.find_cached_event_brief",
+                return_value=None,
+            ),
+            patch(
+                "app.api.research.save_event_brief",
+                return_value=2,
+            ),
+        ):
             response = TestClient(app).post(
                 "/api/briefs/generate",
                 json={

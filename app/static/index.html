@@ -7,7 +7,7 @@
     <script src="/static/theme.js?v=20260911.2"></script>
     <!-- Version static assets so a long-running local browser cannot combine
          new markup with a stale stylesheet or script. -->
-    <link rel="stylesheet" href="/static/styles.css?v=20260911.10">
+    <link rel="stylesheet" href="/static/styles.css?v=20260911.11">
     <link rel="stylesheet" href="/static/navigation.css?v=20260911.3">
   </head>
   <body>
@@ -273,6 +273,15 @@
               <button id="latest-brief-generate" class="primary-button" type="button">Generate Latest Brief</button>
             </div>
           </div>
+          <div class="latest-brief-history-bar">
+            <label for="latest-brief-history">
+              <span>Recent Briefs</span>
+              <select id="latest-brief-history">
+                <option value="">Loading saved briefs...</option>
+              </select>
+            </label>
+            <button id="latest-brief-delete" class="ghost-button" type="button" disabled>Delete</button>
+          </div>
           <p id="latest-brief-empty" class="latest-brief-empty">
             Generate a grounded brief from each selected company's latest earnings call and SEC filing.
           </p>
@@ -380,6 +389,6 @@
     </main>
 
     <script src="/static/formatters.js?v=20260910.1"></script>
-    <script src="/static/app.js?v=20260911.8"></script>
+    <script src="/static/app.js?v=20260911.11"></script>
   </body>
 </html>

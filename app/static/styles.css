@@ -977,6 +977,41 @@ select:focus {
   cursor: not-allowed;
 }
 
+.latest-brief-history-bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 15px;
+  border-top: 1px solid var(--line);
+  padding-top: 13px;
+}
+
+.latest-brief-history-bar label {
+  display: grid;
+  width: min(440px, 100%);
+  gap: 5px;
+}
+
+.latest-brief-history-bar label > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.latest-brief-history-bar select { height: 34px; }
+
+.latest-brief-history-bar .ghost-button {
+  height: 34px;
+  flex: 0 0 auto;
+}
+
+.latest-brief-history-bar .ghost-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
 .latest-brief-scope {
   margin: 6px 0 0;
   color: var(--muted);
@@ -2385,6 +2420,13 @@ html[data-theme="dark"] .chart-tooltip {
     flex-wrap: wrap;
     justify-content: flex-start;
   }
+
+  .latest-brief-history-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .latest-brief-history-bar label { width: 100%; }
 
   .event-picker,
   .range-picker { width: 100%; }

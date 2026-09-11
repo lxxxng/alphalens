@@ -60,6 +60,8 @@ const latestBriefDetails = document.querySelector("#latest-brief-details");
 const latestBriefSections = document.querySelector("#latest-brief-sections");
 const latestBriefSources = document.querySelector("#latest-brief-sources");
 const latestBriefSourceCount = document.querySelector("#latest-brief-source-count");
+const latestBriefHistory = document.querySelector("#latest-brief-history");
+const latestBriefDeleteButton = document.querySelector("#latest-brief-delete");
 const signalSourceButtons = document.querySelectorAll("[data-signal-source]");
 const signalTickerControls = document.querySelector("#signal-ticker-controls");
 const signalSummary = document.querySelector("#signal-summary");
@@ -146,6 +148,8 @@ let resultAvailable = false;
 let resultReturnFocus = null;
 let latestBriefCopyText = "";
 let latestBriefRequest = 0;
+let latestBriefHasResult = false;
+let activeBriefId = null;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const COMPANY_CHART_COLORS = ["#087f5b", "#6d4aff", "#0f8ea8", "#c24156"];
@@ -389,6 +393,125 @@ async function loadResearchHistory() {
   }
 }
 
+function renderEventBriefHistory(items) {
+  const selectedValue = activeBriefId ? String(activeBriefId) : "";
+  latestBriefHistory.replaceChildren();
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = items.length
+    ? "Open a recent brief"
+    : "No saved briefs yet";
+  latestBriefHistory.appendChild(placeholder);
+
+  for (const item of items) {
+    const option = document.createElement("option");
+    option.value = String(item.brief_id);
+    option.textContent = [
+      item.tickers.join(" / "),
+      item.headline,
+      formatHistoryDate(item.created_at),
+    ].filter(Boolean).join(" | ");
+    latestBriefHistory.appendChild(option);
+  }
+
+  latestBriefHistory.value = selectedValue;
+}
+
+async function loadEventBriefHistory() {
+  latestBriefHistory.disabled = true;
+
+  try {
+    const response = await fetch("/api/briefs/history?limit=20");
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not load saved event briefs.");
+    }
+
+    renderEventBriefHistory(data.briefs || []);
+  } catch (error) {
+    latestBriefHistory.replaceChildren();
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Brief history unavailable";
+    latestBriefHistory.appendChild(option);
+  } finally {
+    latestBriefHistory.disabled = false;
+  }
+}
+
+function displayEventBrief(data, statusLabel = "Current") {
+  renderEventBrief(data.brief);
+  renderSources(
+    data.sources || [],
+    latestBriefSources,
+    latestBriefSourceCount
+  );
+  latestBriefHasResult = true;
+  activeBriefId = data.brief_id || null;
+  latestBriefScope.textContent = [
+    (data.tickers || [data.ticker]).filter(Boolean).join(" / "),
+    data.created_at
+      ? `Saved ${formatHistoryDate(data.created_at)}`
+      : "Latest earnings call + SEC filing",
+  ].filter(Boolean).join(" | ");
+  latestBriefCopyButton.disabled = false;
+  latestBriefDeleteButton.disabled = !activeBriefId;
+  latestBriefGenerateButton.textContent = "Refresh Brief";
+  latestBriefHistory.value = activeBriefId ? String(activeBriefId) : "";
+  setLatestBriefStatus(statusLabel);
+}
+
+async function openSavedEventBrief(briefId) {
+  setLatestBriefStatus("Loading", "loading");
+  latestBriefGenerateButton.disabled = true;
+
+  try {
+    const response = await fetch(`/api/briefs/history/${briefId}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not open the saved event brief.");
+    }
+
+    await applyTickerSelection(data.tickers || [], { manual: true });
+    displayEventBrief(data, "Saved");
+  } catch (error) {
+    latestBriefEmpty.textContent = error.message;
+    latestBriefEmpty.hidden = false;
+    setLatestBriefStatus("Load failed", "error");
+  } finally {
+    latestBriefGenerateButton.disabled = false;
+  }
+}
+
+async function deleteSavedEventBrief() {
+  if (!activeBriefId || !window.confirm("Delete this saved event brief?")) {
+    return;
+  }
+
+  const briefId = activeBriefId;
+
+  try {
+    const response = await fetch(
+      `/api/briefs/history/${briefId}`,
+      { method: "DELETE" }
+    );
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not delete the saved event brief.");
+    }
+
+    resetLatestBrief();
+    await loadEventBriefHistory();
+    setLatestBriefStatus("Deleted");
+  } catch (error) {
+    setLatestBriefStatus("Delete failed", "error");
+  }
+}
+
 async function restoreSavedFilters(run) {
   form.elements.question.value = run.question;
   form.elements.top_k.value = run.top_k;
@@ -568,6 +691,8 @@ function syncResearchRunUrl(runId = null) {
 function resetLatestBrief() {
   latestBriefRequest += 1;
   latestBriefCopyText = "";
+  latestBriefHasResult = false;
+  activeBriefId = null;
   latestBriefScope.textContent = selectedTickers.length
     ? `${selectedTickers.join(" / ")} | Latest earnings call + SEC filing`
     : "Select at least one company";
@@ -589,6 +714,11 @@ function resetLatestBrief() {
     ? "Generate Comparison"
     : "Generate Latest Brief";
   latestBriefCopyButton.disabled = true;
+  latestBriefDeleteButton.disabled = true;
+
+  if (latestBriefHistory.options.length) {
+    latestBriefHistory.value = "";
+  }
 }
 
 async function applyTickerSelection(
@@ -2535,6 +2665,16 @@ latestBriefCopyButton.addEventListener("click", async () => {
   }
 });
 
+latestBriefHistory.addEventListener("change", () => {
+  const briefId = Number(latestBriefHistory.value);
+
+  if (Number.isInteger(briefId) && briefId > 0) {
+    openSavedEventBrief(briefId);
+  }
+});
+
+latestBriefDeleteButton.addEventListener("click", deleteSavedEventBrief);
+
 chartPinButton.addEventListener("click", () => {
   const pinned = priceChartPanel.classList.toggle("pinned");
   chartPinButton.setAttribute("aria-pressed", String(pinned));
@@ -2582,6 +2722,7 @@ setWorkspaceView("market");
 const metadataInitialization = initializeMetadata();
 checkOpenAIHealth();
 loadResearchHistory();
+loadEventBriefHistory();
 
 if (Number.isInteger(initialRunId) && initialRunId > 0) {
   metadataInitialization.then(() => openSavedResearchRun(initialRunId));
@@ -2695,6 +2836,7 @@ async function runLatestEventBrief() {
     tickers,
     event_type: "combined",
     top_k: 6,
+    refresh: latestBriefHasResult,
   };
 
   latestBriefGenerateButton.disabled = true;
@@ -2724,15 +2866,8 @@ async function runLatestEventBrief() {
       return;
     }
 
-    renderEventBrief(data.brief);
-    renderSources(
-      data.sources || [],
-      latestBriefSources,
-      latestBriefSourceCount
-    );
-    latestBriefCopyButton.disabled = false;
-    latestBriefGenerateButton.textContent = "Refresh Brief";
-    setLatestBriefStatus("Current");
+    displayEventBrief(data, data.cached ? "Saved" : "Current");
+    await loadEventBriefHistory();
   } catch (error) {
     if (requestId !== latestBriefRequest) {
       return;
