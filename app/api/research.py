@@ -83,7 +83,7 @@ OpenAI
 grounded answer
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import (
     APIRouter,
@@ -100,6 +100,7 @@ from app.rag.generator import (
     answer_question,
     preview_evidence,
 )
+from app.rag.brief_workflow import generate_event_brief
 
 from app.rag.company_resolver import (
     resolve_tickers,
@@ -592,6 +593,62 @@ class ResearchResponse(BaseModel):
     sources: list[ResearchSource]
 
 
+class EventBriefRequest(BaseModel):
+    """Event scope accepted by the LCEL research-brief workflow."""
+
+    ticker: str = Field(min_length=1, max_length=20)
+
+    event_type: Literal["earnings", "filing", "combined"] = "combined"
+
+    fiscal_period: Optional[str] = Field(default=None, max_length=20)
+
+    form_type: Optional[str] = Field(default=None, max_length=20)
+
+    top_k: int = Field(default=6, ge=1, le=12)
+
+
+class EventBriefContentResponse(BaseModel):
+    """Structured sections produced by the grounded brief model."""
+
+    headline: str
+
+    executive_summary: str
+
+    key_developments: list[str]
+
+    topic_signals: list[str]
+
+    market_reaction: list[str]
+
+    risks: list[str]
+
+    watch_items: list[str]
+
+    limitations: list[str]
+
+
+class EventBriefResponse(BaseModel):
+    """Generated brief plus the exact evidence bundle used to create it."""
+
+    ticker: str
+
+    event_type: str
+
+    question: str
+
+    chain_version: str
+
+    model_name: str
+
+    brief: EventBriefContentResponse
+
+    market_context: list[MarketSnapshot] = Field(default_factory=list)
+
+    sentiment_context: dict
+
+    sources: list[ResearchSource] = Field(default_factory=list)
+
+
 class ResearchRunSummary(BaseModel):
     """One lightweight entry in the recent research list."""
 
@@ -946,6 +1003,32 @@ def research(
                 "AlphaLens could not complete the "
                 "research request."
             ),
+        ) from error
+
+
+@router.post(
+    "/briefs/generate",
+    response_model=EventBriefResponse,
+    summary="Generate a structured event research brief",
+)
+def event_research_brief(request: EventBriefRequest):
+    """Run the LCEL retrieval, signal-enrichment, and generation chain."""
+
+    try:
+        return generate_event_brief(
+            ticker=request.ticker,
+            event_type=request.event_type,
+            fiscal_period=request.fiscal_period,
+            form_type=request.form_type,
+            top_k=request.top_k,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        print(f"[API ERROR] /api/briefs/generate: {error}")
+        raise HTTPException(
+            status_code=500,
+            detail="AlphaLens could not generate the event brief.",
         ) from error
 
 

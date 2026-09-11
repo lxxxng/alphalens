@@ -3,16 +3,33 @@
 import unittest
 from unittest.mock import patch
 
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
+
 from app.rag.generator import (
+    build_grounded_answer_chain,
     collect_evidence,
     finalize_grounded_answer,
     resolve_question_tickers,
 )
 from app.rag.company_resolver import resolve_tickers
-from app.rag.retrievers.router import should_prefer_latest_transcript
+from app.rag.retrievers.router import (
+    should_prefer_latest_filing,
+    should_prefer_latest_transcript,
+)
 
 
 class GeneratorGroundingTests(unittest.TestCase):
+    def test_grounded_answer_generation_is_an_lcel_chain(self):
+        model = RunnableLambda(
+            lambda _: AIMessage(content="Grounded result [S1].")
+        )
+        chain = build_grounded_answer_chain(model=model)
+
+        result = chain.invoke({"generation_prompt": "Evidence [S1]"})
+
+        self.assertEqual(result, "Grounded result [S1].")
+
     def test_latest_plural_calls_prefer_each_company_latest_period(self):
         self.assertTrue(
             should_prefer_latest_transcript(
@@ -24,6 +41,20 @@ class GeneratorGroundingTests(unittest.TestCase):
         self.assertFalse(
             should_prefer_latest_transcript(
                 "Compare Walmart margin trends over time across calls."
+            )
+        )
+
+    def test_latest_filing_request_prefers_one_accession(self):
+        self.assertTrue(
+            should_prefer_latest_filing(
+                "Summarize Walmart's latest SEC filing."
+            )
+        )
+
+    def test_filing_trend_request_keeps_historical_scope(self):
+        self.assertFalse(
+            should_prefer_latest_filing(
+                "Compare risk trends across previous filings."
             )
         )
 
@@ -89,6 +120,14 @@ class GeneratorGroundingTests(unittest.TestCase):
         )
 
         self.assertEqual(answer, "NVDA returned 17.29% versus SPY.")
+
+    def test_generated_punctuation_is_terminal_safe(self):
+        answer = finalize_grounded_answer(
+            "Guidance was 3.5%\u20134.5% \u2014 unchanged.",
+            [],
+        )
+
+        self.assertEqual(answer, "Guidance was 3.5%-4.5% - unchanged.")
 
     def test_single_call_answer_gets_exact_fiscal_period(self):
         answer = finalize_grounded_answer(

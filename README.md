@@ -540,6 +540,34 @@ When a transcript question implies a single call, such as "the earnings
 call" or "latest call", and no `fiscal_period` is supplied, AlphaLens
 searches the latest stored transcript for the requested ticker.
 
+Both normal RAG answers and structured event briefs use LangChain Expression
+Language (LCEL) with `ChatOpenAI`. The event workflow composes retrieval,
+structured market context, versioned FinBERT topic signals, prompt assembly,
+schema-constrained generation, and deterministic citation validation.
+
+Generate an earnings, filing, or combined event brief:
+
+```json
+{
+  "ticker": "WMT",
+  "event_type": "earnings",
+  "fiscal_period": "2026Q4",
+  "top_k": 6
+}
+```
+
+Send the payload to:
+
+```text
+POST /api/briefs/generate
+```
+
+The response separates the executive summary, developments, topic signals,
+market reaction, risks, watch items, and limitations while returning the exact
+market, sentiment, and citation records used. This endpoint performs the full
+workflow synchronously. Scheduled triggering and brief persistence are later
+pipeline steps, not behavior implied by this endpoint.
+
 Run the local research UI:
 
 ```powershell

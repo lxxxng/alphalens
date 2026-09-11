@@ -99,12 +99,43 @@ def fetch_chunk_metadata(
     return combined_results
 
 
+def find_latest_accession(
+    engine,
+    chunk_table,
+    ticker: str | None,
+    form_type: str | None,
+) -> str | None:
+    """Return the newest filing represented by the selected SEC chunks."""
+
+    if not ticker:
+        return None
+
+    conditions = [chunk_table.c.ticker == ticker.upper()]
+
+    if form_type:
+        conditions.append(chunk_table.c.form_type == form_type.upper())
+
+    query = (
+        select(chunk_table.c.accession_number)
+        .where(*conditions)
+        .order_by(
+            chunk_table.c.filing_date.desc(),
+            chunk_table.c.accession_number.desc(),
+        )
+        .limit(1)
+    )
+
+    with engine.connect() as connection:
+        return connection.execute(query).scalar_one_or_none()
+
+
 def semantic_search(
     query: str,
     top_k: int = DEFAULT_TOP_K,
     ticker: str | None = None,
     form_type: str | None = None,
     section_key: str | None = None,
+    prefer_latest: bool = False,
 ):
     """
     Search SEC filing chunks semantically.
@@ -140,6 +171,16 @@ def semantic_search(
         metadata,
         autoload_with=engine,
     )
+    latest_accession = (
+        find_latest_accession(
+            engine=engine,
+            chunk_table=chunk_table,
+            ticker=ticker,
+            form_type=form_type,
+        )
+        if prefer_latest
+        else None
+    )
 
     has_filters = any(
         value is not None
@@ -147,6 +188,7 @@ def semantic_search(
             ticker,
             form_type,
             section_key,
+            latest_accession,
         ]
     )
 
@@ -158,12 +200,21 @@ def semantic_search(
         )
 
     def filter_results(results):
-        return apply_metadata_filters(
+        filtered = apply_metadata_filters(
             results=results,
             ticker=ticker,
             form_type=form_type,
             section_key=section_key,
         )
+
+        if latest_accession:
+            filtered = [
+                result
+                for result in filtered
+                if result.get("accession_number") == latest_accession
+            ]
+
+        return filtered
 
     return search_with_filters(
         index=index,

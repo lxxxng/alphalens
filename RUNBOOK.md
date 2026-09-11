@@ -158,6 +158,9 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/retrieval/preview
 # Multi-company evidence preview (up to four tickers)
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/retrieval/preview" -ContentType "application/json" -Body '{"question":"Compare Walmart and Costco margin commentary.","tickers":["WMT","COST"],"source_type":"both","top_k":3}'
 
+# LCEL event brief: retrieval + market context + sentiment + structured output
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/briefs/generate" -ContentType "application/json" -Body '{"ticker":"WMT","event_type":"earnings","fiscal_period":"2026Q4","top_k":6}'
+
 # Market context smoke test
 .\.venv\Scripts\python.exe -c "from app.services.market_context import get_market_context, build_market_context_text; data=get_market_context(['NVDA']); print(data[0]['ticker'], data[0]['latest_trading_date'], round(data[0]['returns']['1Y'], 4)); print(build_market_context_text(data).splitlines()[:5])"
 

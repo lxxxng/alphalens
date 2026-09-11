@@ -85,6 +85,10 @@ import re
 
 from dotenv import load_dotenv
 
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+
 from openai import OpenAI
 
 from app.rag.retrievers.router import (
@@ -269,6 +273,42 @@ def get_rag_model() -> str:
     return os.getenv(
         "RAG_MODEL",
         DEFAULT_RAG_MODEL,
+    )
+
+
+def get_langchain_chat_model(
+    max_output_tokens: int = MAX_OUTPUT_TOKENS,
+) -> ChatOpenAI:
+    """Create the shared LangChain adapter for OpenAI generation."""
+
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY was not found in .env.")
+
+    return ChatOpenAI(
+        model=get_rag_model(),
+        api_key=api_key,
+        use_responses_api=True,
+        max_completion_tokens=max_output_tokens,
+        reasoning_effort="low",
+        verbosity="low",
+        max_retries=2,
+        timeout=90,
+    )
+
+
+def build_grounded_answer_chain(model=None):
+    """Compose the production answer path as a small LCEL pipeline."""
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", RAG_INSTRUCTIONS),
+        ("human", "{generation_prompt}"),
+    ])
+    return (
+        prompt
+        | (model or get_langchain_chat_model())
+        | StrOutputParser()
     )
 
 
@@ -734,6 +774,26 @@ state what cannot be determined from the retrieved evidence.
 SOURCE_CITATION_PATTERN = re.compile(r"[ \t]*\[S\d+\]")
 
 
+ASCII_PUNCTUATION_TRANSLATION = str.maketrans({
+    "\u00a0": " ",
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2022": "-",
+    "\u2026": "...",
+    "\u2212": "-",
+})
+
+
+def normalize_generated_punctuation(text: str) -> str:
+    """Keep generated punctuation stable in Windows terminals and JSON."""
+
+    return text.translate(ASCII_PUNCTUATION_TRANSLATION)
+
+
 def finalize_grounded_answer(
     answer: str,
     retrieved_results: list[dict],
@@ -745,7 +805,7 @@ def finalize_grounded_answer(
     them on every generation.
     """
 
-    answer = answer.strip()
+    answer = normalize_generated_punctuation(answer).strip()
 
     if not retrieved_results:
         # Structured market snapshots do not have document citation labels.
@@ -979,12 +1039,6 @@ def generate_grounded_answer(
         )
 
 
-    client = get_openai_client()
-
-
-    model = get_rag_model()
-
-
     # ========================================================
     # Build evidence context
     # ========================================================
@@ -1010,7 +1064,7 @@ def generate_grounded_answer(
 
 
     # ========================================================
-    # OpenAI Responses API
+    # LangChain Expression Language
     # ========================================================
     #
     # instructions:
@@ -1029,42 +1083,17 @@ def generate_grounded_answer(
     #
     # ========================================================
 
-    response = client.responses.create(
+    # Prompt, model, and text parsing are now explicit LCEL stages. This keeps
+    # the provider adapter replaceable and gives LangSmith a real chain to
+    # trace when optional tracing is enabled.
+    answer = build_grounded_answer_chain().invoke({
+        "generation_prompt": prompt,
+    })
 
-        model=model,
-
-        instructions=RAG_INSTRUCTIONS,
-
-        input=prompt,
-
-        max_output_tokens=MAX_OUTPUT_TOKENS,
-
-        # GPT-5 reasoning tokens count toward max_output_tokens. Low effort and
-        # low verbosity leave room for a complete, concise cited answer.
-        reasoning={"effort": "low"},
-
-        text={"verbosity": "low"},
-    )
-
-
-    if response.status == "incomplete":
-
-        reason = getattr(
-            response.incomplete_details,
-            "reason",
-            "unknown",
-        )
-
-        raise RuntimeError(
-            "OpenAI returned an incomplete answer "
-            f"(reason: {reason})."
-        )
-
-
-    # response.output_text provides the combined generated text. Finalization
-    # applies invariants derived from metadata rather than model judgment.
+    # Finalization applies invariants derived from metadata rather than model
+    # judgment.
     return finalize_grounded_answer(
-        answer=response.output_text,
+        answer=answer,
         retrieved_results=retrieved_results,
     )
 

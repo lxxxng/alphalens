@@ -169,6 +169,30 @@ def should_prefer_latest_transcript(
     )
 
 
+def should_prefer_latest_filing(question: str) -> bool:
+    """Return True when a filing question explicitly requests recency."""
+
+    lower_question = question.lower()
+    history_terms = [
+        "over time",
+        "historical",
+        "history",
+        "trend",
+        "trends",
+        "all filings",
+        "previous filings",
+        "past filings",
+    ]
+
+    if any(term in lower_question for term in history_terms):
+        return False
+
+    return any(
+        term in lower_question
+        for term in ("latest", "most recent", "newest")
+    )
+
+
 def semantic_search(
     query: str,
     top_k: int = 5,
@@ -202,6 +226,7 @@ def semantic_search(
         ticker=ticker,
         form_type=form_type,
         section_key=section_key,
+        prefer_latest=prefer_latest,
     )
 
 
@@ -231,6 +256,7 @@ def retrieve_evidence(
         question=question,
         fiscal_period=fiscal_period,
     )
+    prefer_latest_filing = should_prefer_latest_filing(question)
 
     if not tickers:
         for current_source_type in source_types:
@@ -243,8 +269,9 @@ def retrieve_evidence(
                     fiscal_period=fiscal_period,
                     corpus=current_source_type,
                     prefer_latest=(
-                        current_source_type == "transcripts"
-                        and prefer_latest_transcript
+                        prefer_latest_transcript
+                        if current_source_type == "transcripts"
+                        else prefer_latest_filing
                     ),
                 )
             )
@@ -263,8 +290,9 @@ def retrieve_evidence(
                     fiscal_period=fiscal_period,
                     corpus=current_source_type,
                     prefer_latest=(
-                        current_source_type == "transcripts"
-                        and prefer_latest_transcript
+                        prefer_latest_transcript
+                        if current_source_type == "transcripts"
+                        else prefer_latest_filing
                     ),
                 )
             )
