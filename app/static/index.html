@@ -7,7 +7,7 @@
     <script src="/static/theme.js?v=20260911.2"></script>
     <!-- Version static assets so a long-running local browser cannot combine
          new markup with a stale stylesheet or script. -->
-    <link rel="stylesheet" href="/static/styles.css?v=20260911.8">
+    <link rel="stylesheet" href="/static/styles.css?v=20260911.9">
     <link rel="stylesheet" href="/static/navigation.css?v=20260911.3">
   </head>
   <body>
@@ -158,18 +158,6 @@
             </label>
           </fieldset>
 
-          <fieldset class="output-picker">
-            <legend>Output</legend>
-            <label>
-              <input type="radio" name="output_mode" value="answer" checked>
-              <span>Answer</span>
-            </label>
-            <label>
-              <input type="radio" name="output_mode" value="brief">
-              <span>Event Brief</span>
-            </label>
-          </fieldset>
-
           <div class="form-actions">
             <button id="submit-button" class="primary-button" type="submit">
               Generate Answer
@@ -219,6 +207,9 @@
               <h2 id="price-chart-title">Price &amp; Event Monitor</h2>
             </div>
             <div class="chart-controls">
+              <button id="chart-pin" class="chart-pin" type="button" aria-pressed="false">
+                Pin Chart
+              </button>
               <div class="event-picker" aria-label="Chart events">
                 <button type="button" data-event-filter="all" class="active" aria-pressed="true">All events</button>
                 <button type="button" data-event-filter="earnings" aria-pressed="false">Earnings</button>
@@ -267,6 +258,34 @@
           </div>
           <div id="chart-legend" class="chart-legend"></div>
           <div id="market-events" class="market-events" aria-live="polite"></div>
+        </section>
+
+        <section class="latest-brief-panel" aria-labelledby="latest-brief-title">
+          <div class="latest-brief-header">
+            <div>
+              <p class="eyebrow">Latest Intelligence</p>
+              <h2 id="latest-brief-title">Latest Event Brief</h2>
+              <p id="latest-brief-scope" class="latest-brief-scope">WMT | Latest earnings call + SEC filing</p>
+            </div>
+            <div class="latest-brief-actions">
+              <button id="latest-brief-copy" class="ghost-button" type="button" disabled>Copy</button>
+              <span id="latest-brief-status" class="status-pill">Not generated</span>
+              <button id="latest-brief-generate" class="primary-button" type="button">Generate Latest Brief</button>
+            </div>
+          </div>
+          <p id="latest-brief-empty" class="latest-brief-empty">
+            Generate a grounded brief from each selected company's latest earnings call and SEC filing.
+          </p>
+          <article id="latest-brief-output" class="brief-output" hidden></article>
+          <details id="latest-brief-details" class="latest-brief-details" hidden>
+            <summary>Detailed analysis and sources</summary>
+            <div id="latest-brief-sections" class="brief-sections"></div>
+            <div class="sources-header">
+              <h3>Sources</h3>
+              <span id="latest-brief-source-count">0</span>
+            </div>
+            <div id="latest-brief-sources" class="sources-list"></div>
+          </details>
         </section>
 
         <section class="signal-panel" aria-labelledby="signal-title">
@@ -341,8 +360,6 @@
           </div>
 
           <article id="answer" class="answer-text">Ask a question to search SEC filings, earnings call transcripts, or both.</article>
-          <article id="brief-output" class="brief-output" hidden></article>
-
           <section id="market-panel" class="market-panel" hidden>
             <div class="sources-header">
               <h3>Market Snapshot</h3>
@@ -363,6 +380,6 @@
     </main>
 
     <script src="/static/formatters.js?v=20260910.1"></script>
-    <script src="/static/app.js?v=20260911.7"></script>
+    <script src="/static/app.js?v=20260911.8"></script>
   </body>
 </html>

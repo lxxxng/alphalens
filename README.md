@@ -602,14 +602,17 @@ The supporting signal monitor can switch between management-call and SEC
 narrative sentiment, compare each score with the prior event, and show current
 topic-level polarity and coverage. With multiple selected companies, ticker
 tabs retain company-specific detail while Compare overlays sentiment histories
-and displays topic scores side by side. `Generate Event Brief` renders the
-LCEL workflow's structured output alongside its market facts and source
-evidence. The attached right-hand query rail drives a two-view analytical
-canvas: requests switch directly to Research, while the Market tab preserves
-the price, event, and sentiment monitors without losing the answer. Saved runs
-can also be opened directly with `?run_id=<id>`. A persisted header toggle
-switches every surface in the Research and Evaluation workspaces between light
-and dark themes.
+and displays topic scores side by side. A fixed Latest Event Brief band beneath
+the chart generates the LCEL workflow from each selected company's latest
+earnings call and SEC filing. Its executive summary stays visible while the
+detailed sections and evidence remain expandable, keeping sentiment close by
+even for multi-company comparisons. On desktop, Pin Chart converts the market
+chart into a compact sticky monitor while the brief and sentiment sections
+scroll beneath it. The attached right-hand query rail is reserved for ad hoc
+questions; its generated answers switch directly to Research without losing
+the Market view. Saved runs can also be opened directly with `?run_id=<id>`.
+A persisted header toggle switches every surface in the Research and
+Evaluation workspaces between light and dark themes.
 
 The UI loads its dropdown choices and automatic company matches from metadata
 endpoints:

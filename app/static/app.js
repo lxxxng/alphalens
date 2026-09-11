@@ -16,7 +16,6 @@ const marketView = document.querySelector("#market-view");
 const researchView = document.querySelector("#research-view");
 const submitButton = document.querySelector("#submit-button");
 const previewButton = document.querySelector("#preview-button");
-const outputModeInputs = document.querySelectorAll("input[name='output_mode']");
 const copyButton = document.querySelector("#copy-button");
 const sampleButton = document.querySelector("#sample-button");
 const questionInput = document.querySelector("#question");
@@ -49,7 +48,18 @@ const chartBenchmarkReturn = document.querySelector("#chart-benchmark-return");
 const chartRelativeReturn = document.querySelector("#chart-relative-return");
 const chartEventCount = document.querySelector("#chart-event-count");
 const marketEvents = document.querySelector("#market-events");
-const briefOutput = document.querySelector("#brief-output");
+const priceChartPanel = document.querySelector(".price-chart-panel");
+const chartPinButton = document.querySelector("#chart-pin");
+const latestBriefScope = document.querySelector("#latest-brief-scope");
+const latestBriefGenerateButton = document.querySelector("#latest-brief-generate");
+const latestBriefCopyButton = document.querySelector("#latest-brief-copy");
+const latestBriefStatus = document.querySelector("#latest-brief-status");
+const latestBriefEmpty = document.querySelector("#latest-brief-empty");
+const latestBriefOutput = document.querySelector("#latest-brief-output");
+const latestBriefDetails = document.querySelector("#latest-brief-details");
+const latestBriefSections = document.querySelector("#latest-brief-sections");
+const latestBriefSources = document.querySelector("#latest-brief-sources");
+const latestBriefSourceCount = document.querySelector("#latest-brief-source-count");
 const signalSourceButtons = document.querySelectorAll("[data-signal-source]");
 const signalTickerControls = document.querySelector("#signal-ticker-controls");
 const signalSummary = document.querySelector("#signal-summary");
@@ -134,6 +144,8 @@ let signalRequest = 0;
 let lastCopyText = answer.textContent.trim();
 let resultAvailable = false;
 let resultReturnFocus = null;
+let latestBriefCopyText = "";
+let latestBriefRequest = 0;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const COMPANY_CHART_COLORS = ["#087f5b", "#6d4aff", "#0f8ea8", "#c24156"];
@@ -156,6 +168,11 @@ function chartColor(ticker, fallbackIndex = 0) {
 function setStatus(label, state = "") {
   statusPill.textContent = label;
   statusPill.className = `status-pill ${state}`.trim();
+}
+
+function setLatestBriefStatus(label, state = "") {
+  latestBriefStatus.textContent = label;
+  latestBriefStatus.className = `status-pill ${state}`.trim();
 }
 
 function setBusy(isBusy) {
@@ -387,6 +404,7 @@ async function restoreSavedFilters(run) {
   selectedTickers = tickers;
   syncTickerUrl();
   renderTickerPicker();
+  resetLatestBrief();
   const ticker = primaryTicker();
 
   if (metadataReady) {
@@ -545,6 +563,34 @@ function syncResearchRunUrl(runId = null) {
   window.history.replaceState({}, "", url);
 }
 
+// A ticker change invalidates the displayed brief so analysis from a previous
+// company can never masquerade as current intelligence.
+function resetLatestBrief() {
+  latestBriefRequest += 1;
+  latestBriefCopyText = "";
+  latestBriefScope.textContent = selectedTickers.length
+    ? `${selectedTickers.join(" / ")} | Latest earnings call + SEC filing`
+    : "Select at least one company";
+  latestBriefEmpty.textContent = selectedTickers.length
+    ? "Generate a grounded brief from each selected company's latest earnings call and SEC filing."
+    : "Select a company to prepare its latest event brief.";
+  latestBriefEmpty.hidden = false;
+  latestBriefOutput.hidden = true;
+  latestBriefOutput.replaceChildren();
+  latestBriefSections.replaceChildren();
+  latestBriefSources.replaceChildren();
+  latestBriefSourceCount.textContent = "0";
+  latestBriefDetails.hidden = true;
+  latestBriefDetails.open = false;
+  latestBriefStatus.textContent = "Not generated";
+  latestBriefStatus.className = "status-pill";
+  latestBriefGenerateButton.disabled = !selectedTickers.length;
+  latestBriefGenerateButton.textContent = selectedTickers.length > 1
+    ? "Generate Comparison"
+    : "Generate Latest Brief";
+  latestBriefCopyButton.disabled = true;
+}
+
 async function applyTickerSelection(
   values,
   { manual = false, refresh = true } = {}
@@ -564,6 +610,10 @@ async function applyTickerSelection(
   selectedTickers = nextTickers;
   syncTickerUrl();
   renderTickerPicker();
+
+  if (changed) {
+    resetLatestBrief();
+  }
 
   if (changed && refresh && metadataReady) {
     if (previousPrimary !== primaryTicker()) {
@@ -674,34 +724,6 @@ function selectedSourceType() {
   );
 }
 
-function selectedOutputMode() {
-  return form.querySelector("input[name='output_mode']:checked")?.value
-    || "answer";
-}
-
-function setOutputMode(value) {
-  const input = form.querySelector(
-    `input[name="output_mode"][value="${value}"]`
-  );
-
-  if (input) {
-    input.checked = true;
-  }
-
-  updateOutputMode();
-}
-
-function updateOutputMode() {
-  const isBrief = selectedOutputMode() === "brief";
-  submitButton.textContent = isBrief ? "Generate Event Brief" : "Generate Answer";
-  fiscalPeriodSelect.options[0].textContent = isBrief
-    ? "Latest call"
-    : "Latest";
-  formTypeSelect.options[0].textContent = isBrief
-    ? "Any form (latest)"
-    : "Any";
-}
-
 function setSignalSource(value) {
   selectedSignalSource = value;
 
@@ -752,6 +774,7 @@ async function loadTickers() {
 
   syncTickerUrl();
   renderTickerPicker();
+  resetLatestBrief();
 }
 
 async function loadTranscriptPeriods(ticker) {
@@ -857,7 +880,6 @@ async function loadFiltersForTicker(ticker) {
   );
 
   updateFilterState();
-  updateOutputMode();
   setStatus("Idle");
 }
 
@@ -2150,9 +2172,9 @@ function renderMarketContext(items) {
   }
 }
 
-function renderSources(items) {
-  sources.replaceChildren();
-  sourceCount.textContent = String(items.length);
+function renderSources(items, target = sources, countTarget = sourceCount) {
+  target.replaceChildren();
+  countTarget.textContent = String(items.length);
 
   for (const item of items) {
     // <details> gives us accessible expand/collapse behavior without
@@ -2212,12 +2234,11 @@ function renderSources(items) {
     }
 
     element.append(summary, content, footer);
-    sources.appendChild(element);
+    target.appendChild(element);
   }
 }
 
 function showPlainAnswer(text) {
-  briefOutput.hidden = true;
   answer.hidden = false;
   answer.textContent = text;
   lastCopyText = text.trim();
@@ -2242,9 +2263,10 @@ function appendBriefSection(container, title, items) {
 }
 
 function renderEventBrief(brief) {
-  answer.hidden = true;
-  briefOutput.hidden = false;
-  briefOutput.replaceChildren();
+  latestBriefEmpty.hidden = true;
+  latestBriefOutput.hidden = false;
+  latestBriefOutput.replaceChildren();
+  latestBriefSections.replaceChildren();
 
   const headline = document.createElement("h3");
   headline.className = "brief-headline";
@@ -2252,9 +2274,6 @@ function renderEventBrief(brief) {
   const executiveSummary = document.createElement("p");
   executiveSummary.className = "brief-executive-summary";
   executiveSummary.textContent = brief.executive_summary;
-  const sections = document.createElement("div");
-  sections.className = "brief-sections";
-
   for (const [title, items] of [
     ["Key Developments", brief.key_developments],
     ["Topic Signals", brief.topic_signals],
@@ -2263,11 +2282,12 @@ function renderEventBrief(brief) {
     ["Watch Items", brief.watch_items],
     ["Limitations", brief.limitations],
   ]) {
-    appendBriefSection(sections, title, items);
+    appendBriefSection(latestBriefSections, title, items);
   }
 
-  briefOutput.append(headline, executiveSummary, sections);
-  lastCopyText = [
+  latestBriefOutput.append(headline, executiveSummary);
+  latestBriefDetails.hidden = false;
+  latestBriefCopyText = [
     brief.headline,
     "",
     brief.executive_summary,
@@ -2343,8 +2363,8 @@ sampleButton.addEventListener("click", async () => {
   selectedTickers = sample.tickers || [sample.ticker];
   syncTickerUrl();
   renderTickerPicker();
+  resetLatestBrief();
   setSourceType(sample.source_type);
-  setOutputMode("answer");
 
   if (["transcripts", "filings"].includes(sample.source_type)) {
     setSignalSource(sample.source_type);
@@ -2487,10 +2507,6 @@ for (const radio of form.querySelectorAll("input[name='source_type']")) {
   });
 }
 
-for (const input of outputModeInputs) {
-  input.addEventListener("change", updateOutputMode);
-}
-
 copyButton.addEventListener("click", async () => {
   const text = lastCopyText;
 
@@ -2503,6 +2519,29 @@ copyButton.addEventListener("click", async () => {
     setStatus("Copied");
   } catch (error) {
     setStatus("Copy failed", "error");
+  }
+});
+
+latestBriefCopyButton.addEventListener("click", async () => {
+  if (!latestBriefCopyText) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(latestBriefCopyText);
+    setLatestBriefStatus("Copied");
+  } catch (error) {
+    setLatestBriefStatus("Copy failed", "error");
+  }
+});
+
+chartPinButton.addEventListener("click", () => {
+  const pinned = priceChartPanel.classList.toggle("pinned");
+  chartPinButton.setAttribute("aria-pressed", String(pinned));
+  chartPinButton.textContent = pinned ? "Unpin Chart" : "Pin Chart";
+
+  if (marketChartData) {
+    window.requestAnimationFrame(renderMarketChart);
   }
 });
 
@@ -2537,7 +2576,7 @@ document.addEventListener("keydown", (event) => {
 // immediately makes the console ready sooner and keeps one failure from
 // hiding the other.
 renderTickerPicker();
-updateOutputMode();
+resetLatestBrief();
 syncHeaderHeight();
 setWorkspaceView("market");
 const metadataInitialization = initializeMetadata();
@@ -2638,50 +2677,33 @@ async function runResearchRequest(mode) {
   }
 }
 
-async function runEventBrief() {
-  syncResearchRunUrl();
-
-  if (tickerAutoInput.checked) {
-    await resolveTickersFromQuestion();
-  }
-
+async function runLatestEventBrief() {
   const tickers = [...selectedTickers];
-  const ticker = primaryTicker();
 
-  if (!ticker) {
-    resultTitle.textContent = "Ticker required";
-    showPlainAnswer("Select a company or mention one in the question before generating a brief.");
-    setStatus("Needs ticker", "error");
-    showResearchView("Event brief | Ticker required");
+  if (!tickers.length) {
+    latestBriefEmpty.textContent = "Select at least one company before generating a brief.";
+    latestBriefEmpty.hidden = false;
+    setLatestBriefStatus("Needs ticker", "error");
     return;
   }
 
-  const sourceType = selectedSourceType();
-  const eventType = sourceType === "transcripts"
-    ? "earnings"
-    : (sourceType === "filings" ? "filing" : "combined");
+  const selectionKey = tickers.join(",");
+  const requestId = ++latestBriefRequest;
+  // Latest Brief has a stable product scope; ad hoc query filters belong only
+  // to the separate Research workflow.
   const payload = {
     tickers,
-    event_type: eventType,
-    top_k: Math.min(12, Number(form.elements.top_k.value || 6)),
-    focus: questionInput.value.trim(),
+    event_type: "combined",
+    top_k: 6,
   };
 
-  if (eventType !== "filing" && fiscalPeriodSelect.value) {
-    payload.fiscal_period = fiscalPeriodSelect.value;
-  }
-
-  if (eventType !== "earnings" && formTypeSelect.value) {
-    payload.form_type = formTypeSelect.value;
-  }
-
-  setBusy(true);
-  setStatus("Running", "loading");
-  showResearchView(`${tickers.join(", ")} | ${eventType} | Structured event brief`);
-  resultTitle.textContent = "Building Event Brief";
-  showPlainAnswer("Collecting event evidence, market reaction, and sentiment signals...");
-  renderMarketContext([]);
-  renderSources([]);
+  latestBriefGenerateButton.disabled = true;
+  latestBriefCopyButton.disabled = true;
+  setLatestBriefStatus("Generating", "loading");
+  latestBriefEmpty.textContent = "Collecting the latest event evidence, market reaction, and sentiment signals...";
+  latestBriefEmpty.hidden = false;
+  latestBriefOutput.hidden = true;
+  latestBriefDetails.hidden = true;
 
   try {
     const response = await fetch("/api/briefs/generate", {
@@ -2695,28 +2717,42 @@ async function runEventBrief() {
       throw new Error(data.detail || "Event brief request failed.");
     }
 
-    resultTitle.textContent = `${(data.tickers || [data.ticker]).join(" / ")} Event Brief`;
+    if (
+      requestId !== latestBriefRequest
+      || selectionKey !== selectedTickers.join(",")
+    ) {
+      return;
+    }
+
     renderEventBrief(data.brief);
-    renderMarketContext(data.market_context || []);
-    renderSources(data.sources || []);
-    setStatus("Done");
+    renderSources(
+      data.sources || [],
+      latestBriefSources,
+      latestBriefSourceCount
+    );
+    latestBriefCopyButton.disabled = false;
+    latestBriefGenerateButton.textContent = "Refresh Brief";
+    setLatestBriefStatus("Current");
   } catch (error) {
-    resultTitle.textContent = "Brief Error";
-    showPlainAnswer(error.message);
-    setStatus("Error", "error");
+    if (requestId !== latestBriefRequest) {
+      return;
+    }
+
+    latestBriefEmpty.textContent = error.message;
+    latestBriefEmpty.hidden = false;
+    setLatestBriefStatus("Error", "error");
   } finally {
-    setBusy(false);
+    if (requestId === latestBriefRequest) {
+      latestBriefGenerateButton.disabled = false;
+    }
   }
 }
 
+latestBriefGenerateButton.addEventListener("click", runLatestEventBrief);
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-
-  if (selectedOutputMode() === "brief") {
-    await runEventBrief();
-  } else {
-    await runResearchRequest("answer");
-  }
+  await runResearchRequest("answer");
 });
 
 previewButton.addEventListener("click", async () => {
