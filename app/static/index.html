@@ -7,7 +7,7 @@
     <script src="/static/theme.js?v=20260911.2"></script>
     <!-- Version static assets so a long-running local browser cannot combine
          new markup with a stale stylesheet or script. -->
-    <link rel="stylesheet" href="/static/styles.css?v=20260911.11">
+    <link rel="stylesheet" href="/static/styles.css?v=20260911.13">
     <link rel="stylesheet" href="/static/navigation.css?v=20260911.3">
   </head>
   <body>
@@ -228,23 +228,10 @@
             <span id="chart-period-return">Loading prices...</span>
             <span id="chart-date-range"></span>
           </div>
-          <div class="chart-kpis" aria-label="Market performance summary">
-            <div>
-              <span id="chart-company-label">Company return</span>
-              <strong id="chart-company-return">--</strong>
-            </div>
-            <div>
-              <span id="chart-benchmark-label">SPY return</span>
-              <strong id="chart-benchmark-return">--</strong>
-            </div>
-            <div>
-              <span>Relative performance</span>
-              <strong id="chart-relative-return">--</strong>
-            </div>
-            <div>
-              <span>Visible events</span>
-              <strong id="chart-event-count">--</strong>
-            </div>
+          <div id="chart-kpis" class="chart-kpis" aria-label="Market performance summary">
+            <div><span>WMT return</span><strong>--</strong></div>
+            <div><span>SPY return</span><strong>--</strong></div>
+            <div data-chart-kpi="events"><span>Visible events</span><strong>--</strong></div>
           </div>
           <p class="chart-axis-caption">Y-axis - cumulative return since period start (%)</p>
           <div id="price-chart" class="price-chart" aria-live="polite">
@@ -281,6 +268,22 @@
               </select>
             </label>
             <button id="latest-brief-delete" class="ghost-button" type="button" disabled>Delete</button>
+          </div>
+          <div
+            id="latest-brief-loading"
+            class="operation-loader"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            hidden
+          >
+            <span class="operation-spinner" aria-hidden="true"></span>
+            <span class="operation-loading-copy">
+              <strong id="latest-brief-loading-title">Building latest event brief</strong>
+              <span id="latest-brief-loading-stage">Checking current company events...</span>
+            </span>
+            <span id="latest-brief-loading-time" class="operation-loading-time">0s</span>
+            <span class="operation-progress" aria-hidden="true"><span></span></span>
           </div>
           <p id="latest-brief-empty" class="latest-brief-empty">
             Generate a grounded brief from each selected company's latest earnings call and SEC filing.
@@ -368,6 +371,22 @@
             </div>
           </div>
 
+          <div
+            id="research-loading"
+            class="operation-loader research-operation-loader"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            hidden
+          >
+            <span class="operation-spinner" aria-hidden="true"></span>
+            <span class="operation-loading-copy">
+              <strong id="research-loading-title">Building research answer</strong>
+              <span id="research-loading-stage">Preparing the research scope...</span>
+            </span>
+            <span id="research-loading-time" class="operation-loading-time">0s</span>
+            <span class="operation-progress" aria-hidden="true"><span></span></span>
+          </div>
           <article id="answer" class="answer-text">Ask a question to search SEC filings, earnings call transcripts, or both.</article>
           <section id="market-panel" class="market-panel" hidden>
             <div class="sources-header">
@@ -389,6 +408,6 @@
     </main>
 
     <script src="/static/formatters.js?v=20260910.1"></script>
-    <script src="/static/app.js?v=20260911.11"></script>
+    <script src="/static/app.js?v=20260911.15"></script>
   </body>
 </html>

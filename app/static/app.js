@@ -41,12 +41,7 @@ const chartDateRange = document.querySelector("#chart-date-range");
 const chartLegend = document.querySelector("#chart-legend");
 const chartPeriodButtons = document.querySelectorAll("[data-period]");
 const chartEventButtons = document.querySelectorAll("[data-event-filter]");
-const chartCompanyLabel = document.querySelector("#chart-company-label");
-const chartCompanyReturn = document.querySelector("#chart-company-return");
-const chartBenchmarkLabel = document.querySelector("#chart-benchmark-label");
-const chartBenchmarkReturn = document.querySelector("#chart-benchmark-return");
-const chartRelativeReturn = document.querySelector("#chart-relative-return");
-const chartEventCount = document.querySelector("#chart-event-count");
+const chartKpis = document.querySelector("#chart-kpis");
 const marketEvents = document.querySelector("#market-events");
 const priceChartPanel = document.querySelector(".price-chart-panel");
 const chartPinButton = document.querySelector("#chart-pin");
@@ -62,6 +57,15 @@ const latestBriefSources = document.querySelector("#latest-brief-sources");
 const latestBriefSourceCount = document.querySelector("#latest-brief-source-count");
 const latestBriefHistory = document.querySelector("#latest-brief-history");
 const latestBriefDeleteButton = document.querySelector("#latest-brief-delete");
+const latestBriefPanel = document.querySelector(".latest-brief-panel");
+const latestBriefLoading = document.querySelector("#latest-brief-loading");
+const latestBriefLoadingTitle = document.querySelector("#latest-brief-loading-title");
+const latestBriefLoadingStage = document.querySelector("#latest-brief-loading-stage");
+const latestBriefLoadingTime = document.querySelector("#latest-brief-loading-time");
+const researchLoading = document.querySelector("#research-loading");
+const researchLoadingTitle = document.querySelector("#research-loading-title");
+const researchLoadingStage = document.querySelector("#research-loading-stage");
+const researchLoadingTime = document.querySelector("#research-loading-time");
 const signalSourceButtons = document.querySelectorAll("[data-signal-source]");
 const signalTickerControls = document.querySelector("#signal-ticker-controls");
 const signalSummary = document.querySelector("#signal-summary");
@@ -150,6 +154,8 @@ let latestBriefCopyText = "";
 let latestBriefRequest = 0;
 let latestBriefHasResult = false;
 let activeBriefId = null;
+let researchLoadingStop = null;
+let latestBriefLoadingStop = null;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const COMPANY_CHART_COLORS = ["#087f5b", "#6d4aff", "#0f8ea8", "#c24156"];
@@ -179,9 +185,80 @@ function setLatestBriefStatus(label, state = "") {
   latestBriefStatus.className = `status-pill ${state}`.trim();
 }
 
-function setBusy(isBusy) {
+function setBusy(isBusy, mode = "answer") {
   submitButton.disabled = isBusy;
   previewButton.disabled = isBusy;
+  form.setAttribute("aria-busy", String(isBusy));
+  submitButton.classList.toggle("is-loading", isBusy && mode === "answer");
+  previewButton.classList.toggle("is-loading", isBusy && mode === "preview");
+  submitButton.textContent = isBusy && mode === "answer"
+    ? "Searching..."
+    : "Generate Answer";
+  previewButton.textContent = isBusy && mode === "preview"
+    ? "Loading Evidence..."
+    : "Preview Evidence";
+}
+
+// Long model calls do not stream server-side progress, so elapsed time and
+// rotating stage labels provide useful feedback without inventing percentages.
+function startOperationLoading({ container, title, stage, elapsed, heading, stages }) {
+  const startedAt = Date.now();
+  let stageIndex = 0;
+  title.textContent = heading;
+  stage.textContent = stages[0];
+  elapsed.textContent = "0s";
+  container.hidden = false;
+  container.setAttribute("aria-busy", "true");
+
+  const timer = window.setInterval(() => {
+    const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    const nextStageIndex = Math.min(
+      Math.floor(elapsedSeconds / 4),
+      stages.length - 1
+    );
+
+    if (nextStageIndex !== stageIndex) {
+      stageIndex = nextStageIndex;
+      stage.textContent = stages[stageIndex];
+    }
+
+    elapsed.textContent = `${elapsedSeconds}s`;
+  }, 250);
+
+  return () => {
+    window.clearInterval(timer);
+    container.hidden = true;
+    container.removeAttribute("aria-busy");
+  };
+}
+
+function stopResearchLoading() {
+  researchLoadingStop?.();
+  researchLoadingStop = null;
+}
+
+function stopLatestBriefLoading() {
+  latestBriefLoadingStop?.();
+  latestBriefLoadingStop = null;
+}
+
+function setLatestBriefBusy(isBusy) {
+  latestBriefPanel.setAttribute("aria-busy", String(isBusy));
+  latestBriefGenerateButton.disabled = isBusy || !selectedTickers.length;
+  latestBriefGenerateButton.classList.toggle("is-loading", isBusy);
+
+  if (isBusy) {
+    latestBriefGenerateButton.textContent = selectedTickers.length > 1
+      ? "Building Comparison..."
+      : "Generating Brief...";
+    return;
+  }
+
+  latestBriefGenerateButton.textContent = latestBriefHasResult
+    ? "Refresh Brief"
+    : selectedTickers.length > 1
+      ? "Generate Comparison"
+      : "Generate Latest Brief";
 }
 
 function syncHeaderHeight() {
@@ -406,12 +483,13 @@ function renderEventBriefHistory(items) {
 
   for (const item of items) {
     const option = document.createElement("option");
+    const tickers = item.tickers || [];
+    // Native select menus can escape narrow panels on Windows, so history
+    // labels keep every short ticker but omit the much longer LLM headline.
+    const tickerLabel = tickers.join(" / ") || "Brief";
     option.value = String(item.brief_id);
-    option.textContent = [
-      item.tickers.join(" / "),
-      item.headline,
-      formatHistoryDate(item.created_at),
-    ].filter(Boolean).join(" | ");
+    option.textContent = `${tickerLabel} | ${formatHistoryDate(item.created_at)}`;
+    option.title = item.headline || "Saved event brief";
     latestBriefHistory.appendChild(option);
   }
 
@@ -690,6 +768,7 @@ function syncResearchRunUrl(runId = null) {
 // company can never masquerade as current intelligence.
 function resetLatestBrief() {
   latestBriefRequest += 1;
+  stopLatestBriefLoading();
   latestBriefCopyText = "";
   latestBriefHasResult = false;
   activeBriefId = null;
@@ -709,10 +788,7 @@ function resetLatestBrief() {
   latestBriefDetails.open = false;
   latestBriefStatus.textContent = "Not generated";
   latestBriefStatus.className = "status-pill";
-  latestBriefGenerateButton.disabled = !selectedTickers.length;
-  latestBriefGenerateButton.textContent = selectedTickers.length > 1
-    ? "Generate Comparison"
-    : "Generate Latest Brief";
+  setLatestBriefBusy(false);
   latestBriefCopyButton.disabled = true;
   latestBriefDeleteButton.disabled = true;
 
@@ -1755,10 +1831,108 @@ function setChartLoading(message) {
   chartTooltip.hidden = true;
   chartEmpty.hidden = false;
   chartEmpty.textContent = message;
-  chartCompanyReturn.textContent = "--";
-  chartBenchmarkReturn.textContent = "--";
-  chartRelativeReturn.textContent = "--";
-  chartEventCount.textContent = "--";
+  renderChartKpis();
+}
+
+function chartSeriesReturn(series) {
+  if (!series?.points?.length) {
+    return null;
+  }
+
+  const first = series.points[0].indexed_value;
+  const last = series.points.at(-1).indexed_value;
+  return Number.isFinite(first) && Number.isFinite(last) && first !== 0
+    ? last / first - 1
+    : null;
+}
+
+function chartKpi(label, value, { returnValue = null, detail = "", color = "", key = "" } = {}) {
+  const item = document.createElement("div");
+  item.className = "chart-kpi";
+
+  if (key) {
+    item.dataset.chartKpi = key;
+  }
+
+  if (color) {
+    item.style.setProperty("--chart-kpi-color", color);
+    item.classList.add("series-kpi");
+  }
+
+  const labelElement = document.createElement("span");
+  labelElement.className = "chart-kpi-label";
+
+  if (color) {
+    const swatch = document.createElement("i");
+    swatch.style.backgroundColor = color;
+    labelElement.appendChild(swatch);
+  }
+
+  labelElement.append(label);
+  const valueElement = document.createElement("strong");
+  valueElement.textContent = value;
+  setReturnClass(valueElement, returnValue);
+  item.append(labelElement, valueElement);
+
+  if (detail) {
+    const detailElement = document.createElement("small");
+    detailElement.textContent = detail;
+    item.appendChild(detailElement);
+  }
+
+  return item;
+}
+
+// Comparison KPIs mirror every line on the chart. Relative performance lives
+// beneath each company return so the strip stays useful with up to four names.
+function renderChartKpis(data = null) {
+  chartKpis.replaceChildren();
+  const companyTickers = data?.tickers?.length
+    ? data.tickers
+    : selectedTickers;
+  const benchmarkTicker = data?.benchmark_ticker || "SPY";
+  const benchmarkSeries = data?.series?.find(
+    (series) => series.ticker === benchmarkTicker
+  );
+  const benchmarkReturn = chartSeriesReturn(benchmarkSeries);
+
+  companyTickers.forEach((ticker, index) => {
+    const series = data?.series?.find((item) => item.ticker === ticker);
+    const periodReturn = chartSeriesReturn(series);
+    const relativeReturn = Number.isFinite(periodReturn) && Number.isFinite(benchmarkReturn)
+      ? periodReturn - benchmarkReturn
+      : null;
+    chartKpis.appendChild(chartKpi(
+      `${ticker} return`,
+      formatReturn(periodReturn),
+      {
+        returnValue: periodReturn,
+        detail: Number.isFinite(relativeReturn)
+          ? `${formatReturn(relativeReturn)} vs ${benchmarkTicker}`
+          : "",
+        color: chartColor(ticker, index),
+      }
+    ));
+  });
+
+  chartKpis.appendChild(chartKpi(
+    `${benchmarkTicker} return`,
+    formatReturn(benchmarkReturn),
+    {
+      returnValue: benchmarkReturn,
+      detail: "Market benchmark",
+      color: BENCHMARK_CHART_COLOR,
+    }
+  ));
+  chartKpis.appendChild(chartKpi(
+    "Visible events",
+    data ? String(visibleMarketEvents().length) : "--",
+    { key: "events" }
+  ));
+  chartKpis.style.setProperty(
+    "--chart-kpi-count",
+    String(companyTickers.length + 2)
+  );
 }
 
 function renderChartLegend(series, events) {
@@ -2158,36 +2332,27 @@ function renderMarketChart() {
 
   renderChartLegend(marketChartData.series, events);
   renderMarketEvents(events);
-  chartEventCount.textContent = String(events.length);
+  const eventCount = chartKpis.querySelector("[data-chart-kpi='events'] strong");
+
+  if (eventCount) {
+    eventCount.textContent = String(events.length);
+  }
 }
 
 function updateChartSummary(data) {
   const primarySeries = data.series[0];
-  const first = primarySeries.points[0];
-  const last = primarySeries.points[primarySeries.points.length - 1];
-  const periodReturn = last.indexed_value / first.indexed_value - 1;
-  const benchmarkSeries = data.series.find(
-    (series) => series.ticker === data.benchmark_ticker
-  );
-  const benchmarkReturn = benchmarkSeries
-    ? benchmarkSeries.points.at(-1).indexed_value / benchmarkSeries.points[0].indexed_value - 1
-    : null;
-  const relativeReturn = Number.isFinite(benchmarkReturn)
-    ? periodReturn - benchmarkReturn
-    : null;
+  const periodReturn = chartSeriesReturn(primarySeries);
+  const companyTickers = data.tickers || [data.ticker];
 
-  chartTicker.textContent = (data.tickers || [data.ticker]).join(" / ");
-  chartPeriodReturn.textContent = `${data.ticker} ${formatPercent(periodReturn)} over ${data.period}`;
-  chartPeriodReturn.className = periodReturn >= 0 ? "positive" : "negative";
+  chartTicker.textContent = companyTickers.join(" / ");
+  chartPeriodReturn.textContent = companyTickers.length > 1
+    ? `${companyTickers.length} companies vs ${data.benchmark_ticker} over ${data.period}`
+    : `${data.ticker} ${formatPercent(periodReturn)} over ${data.period}`;
+  chartPeriodReturn.className = companyTickers.length > 1
+    ? ""
+    : periodReturn >= 0 ? "positive" : "negative";
   chartDateRange.textContent = `${formatChartDate(data.start_date)} - ${formatChartDate(data.end_date)}`;
-  chartCompanyLabel.textContent = `${data.ticker} return`;
-  chartCompanyReturn.textContent = formatReturn(periodReturn);
-  chartBenchmarkLabel.textContent = `${data.benchmark_ticker} return`;
-  chartBenchmarkReturn.textContent = formatReturn(benchmarkReturn);
-  chartRelativeReturn.textContent = formatReturn(relativeReturn);
-  setReturnClass(chartCompanyReturn, periodReturn);
-  setReturnClass(chartBenchmarkReturn, benchmarkReturn);
-  setReturnClass(chartRelativeReturn, relativeReturn);
+  renderChartKpis(data);
 }
 
 async function loadMarketChart() {
@@ -2739,33 +2904,50 @@ if ("ResizeObserver" in window) {
 
 async function runResearchRequest(mode) {
   syncResearchRunUrl();
-
-  if (tickerAutoInput.checked) {
-    await resolveTickersFromQuestion();
-  }
-
-  const payload = payloadFromForm(
-    new FormData(form)
-  );
-
   const isPreview = mode === "preview";
-  const scope = [
-    selectedTickers.join(", ") || "Auto-detected company",
-    payload.source_type,
-    isPreview ? "Evidence preview" : "Generated answer",
-  ].join(" | ");
 
-  setBusy(true);
+  setBusy(true, mode);
   setStatus("Running", "loading");
-  showResearchView(scope);
+  showResearchView("Preparing research request");
   resultTitle.textContent = isPreview ? "Previewing" : "Searching";
-  showPlainAnswer(isPreview
-    ? "Retrieving evidence only..."
-    : "Retrieving evidence and generating the answer...");
+  answer.hidden = true;
+  stopResearchLoading();
+  researchLoadingStop = startOperationLoading({
+    container: researchLoading,
+    title: researchLoadingTitle,
+    stage: researchLoadingStage,
+    elapsed: researchLoadingTime,
+    heading: isPreview ? "Preparing evidence preview" : "Building research answer",
+    stages: isPreview
+      ? [
+          "Resolving companies and search filters...",
+          "Searching the semantic evidence index...",
+          "Ranking the most relevant source chunks...",
+        ]
+      : [
+          "Resolving companies and search filters...",
+          "Searching filings and earnings-call evidence...",
+          "Ranking chunks and assembling cited context...",
+          "Generating the grounded answer...",
+        ],
+  });
   renderMarketContext([]);
   renderSources([]);
 
   try {
+    if (tickerAutoInput.checked) {
+      await resolveTickersFromQuestion();
+    }
+
+    const payload = payloadFromForm(
+      new FormData(form)
+    );
+    resultScope.textContent = [
+      selectedTickers.join(", ") || "Auto-detected company",
+      payload.source_type,
+      isPreview ? "Evidence preview" : "Generated answer",
+    ].join(" | ");
+
     // The static UI is served by the same FastAPI app, so a relative URL
     // works locally and keeps deployment simple later.
     const endpoint = isPreview
@@ -2790,6 +2972,7 @@ async function runResearchRequest(mode) {
       await applyTickerSelection(data.tickers);
     }
 
+    stopResearchLoading();
     resultTitle.textContent = "Complete";
     showPlainAnswer(isPreview
       ? [
@@ -2810,10 +2993,12 @@ async function runResearchRequest(mode) {
     }
 
   } catch (error) {
+    stopResearchLoading();
     resultTitle.textContent = "Error";
     showPlainAnswer(error.message);
     setStatus("Error", "error");
   } finally {
+    stopResearchLoading();
     setBusy(false);
   }
 }
@@ -2839,13 +3024,28 @@ async function runLatestEventBrief() {
     refresh: latestBriefHasResult,
   };
 
-  latestBriefGenerateButton.disabled = true;
+  setLatestBriefBusy(true);
   latestBriefCopyButton.disabled = true;
   setLatestBriefStatus("Generating", "loading");
-  latestBriefEmpty.textContent = "Collecting the latest event evidence, market reaction, and sentiment signals...";
-  latestBriefEmpty.hidden = false;
+  latestBriefEmpty.hidden = true;
   latestBriefOutput.hidden = true;
   latestBriefDetails.hidden = true;
+  stopLatestBriefLoading();
+  latestBriefLoadingStop = startOperationLoading({
+    container: latestBriefLoading,
+    title: latestBriefLoadingTitle,
+    stage: latestBriefLoadingStage,
+    elapsed: latestBriefLoadingTime,
+    heading: tickers.length > 1
+      ? `Building ${tickers.length}-company event comparison`
+      : `Building ${tickers[0]} event brief`,
+    stages: [
+      "Checking for a current saved brief...",
+      "Retrieving the latest earnings call and SEC filing...",
+      "Adding market reaction and sentiment signals...",
+      "Generating and validating the cited brief...",
+    ],
+  });
 
   try {
     const response = await fetch("/api/briefs/generate", {
@@ -2866,6 +3066,7 @@ async function runLatestEventBrief() {
       return;
     }
 
+    stopLatestBriefLoading();
     displayEventBrief(data, data.cached ? "Saved" : "Current");
     await loadEventBriefHistory();
   } catch (error) {
@@ -2873,12 +3074,14 @@ async function runLatestEventBrief() {
       return;
     }
 
+    stopLatestBriefLoading();
     latestBriefEmpty.textContent = error.message;
     latestBriefEmpty.hidden = false;
     setLatestBriefStatus("Error", "error");
   } finally {
     if (requestId === latestBriefRequest) {
-      latestBriefGenerateButton.disabled = false;
+      stopLatestBriefLoading();
+      setLatestBriefBusy(false);
     }
   }
 }
