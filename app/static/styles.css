@@ -2207,6 +2207,25 @@ html[data-theme="dark"] .result-close {
   color: #c7d2cd;
 }
 
+html[data-theme="dark"] .latest-brief-actions .primary-button {
+  border-color: #64d7b1;
+  background: #64d7b1;
+  color: #07130f;
+}
+
+html[data-theme="dark"] .latest-brief-actions .primary-button:hover {
+  border-color: #84e0c1;
+  background: #84e0c1;
+  color: #07130f;
+}
+
+html[data-theme="dark"] .latest-brief-actions .primary-button:disabled {
+  border-color: #33443e;
+  background: #263630;
+  color: #71827b;
+  cursor: not-allowed;
+}
+
 html[data-theme="dark"] .status-pill,
 html[data-theme="dark"] #source-count,
 html[data-theme="dark"] #market-count,
