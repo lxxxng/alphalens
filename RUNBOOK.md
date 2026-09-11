@@ -133,6 +133,7 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/transcripts?ticker=WMT"
 Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/transcripts/287"
 Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/filings/0000104169-21-000058"
+Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/topics"
 
 # Local research UI
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000

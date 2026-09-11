@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.ml.financial_topics import topic_taxonomy_payload
 from app.services.sentiment import (
     get_filing_sentiment,
     get_transcript_sentiment,
@@ -13,6 +14,13 @@ router = APIRouter(
     prefix="/api/sentiment",
     tags=["Sentiment"],
 )
+
+
+@router.get("/topics")
+def sentiment_topic_taxonomy():
+    """Return the versioned topics used by sentiment aggregation."""
+
+    return topic_taxonomy_payload()
 
 
 @router.get("/transcripts")

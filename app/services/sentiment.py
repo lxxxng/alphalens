@@ -8,6 +8,11 @@ from collections import defaultdict
 from dotenv import load_dotenv
 from sqlalchemy import MetaData, Table, and_, create_engine, select
 
+from app.ml.financial_topics import (
+    TOPIC_CLASSIFIER_VERSION,
+    TOPIC_TAXONOMY,
+    classify_financial_topics,
+)
 from app.ml.transcript_sentiment import (
     DEFAULT_MODEL_NAME,
     DEFAULT_MODEL_REVISION,
@@ -115,6 +120,41 @@ def coverage_summary(rows: list[dict]) -> dict:
     }
 
 
+def build_topic_summaries(rows: list[dict]) -> list[dict]:
+    """Aggregate multi-label topic matches with explainable match terms."""
+
+    topic_rows = defaultdict(list)
+    topic_terms = defaultdict(set)
+
+    for row in rows:
+        for match in classify_financial_topics(row.get("content")):
+            topic_key = match["topic_key"]
+            topic_rows[topic_key].append(row)
+            topic_terms[topic_key].update(match["matched_terms"])
+
+    summaries = []
+
+    for topic in TOPIC_TAXONOMY:
+        matched_rows = topic_rows.get(topic.key, [])
+
+        if not matched_rows:
+            continue
+
+        summaries.append({
+            "topic_key": topic.key,
+            "topic_label": topic.label,
+            "matched_terms": sorted(topic_terms[topic.key]),
+            **coverage_summary(matched_rows),
+        })
+
+    # Discussion volume is more useful to clients than taxonomy order, while
+    # the topic key keeps equal-volume results deterministic.
+    return sorted(
+        summaries,
+        key=lambda item: (-item["eligible_items"], item["topic_key"]),
+    )
+
+
 def _transcript_rows(
     ticker: str | None = None,
     transcript_id: int | None = None,
@@ -147,6 +187,7 @@ def _transcript_rows(
             turns.c.speaker_name,
             turns.c.speaker_title,
             turns.c.speaker_role,
+            turns.c.content,
             sentiment.c.status,
             sentiment.c.sentiment_label,
             sentiment.c.sentiment_score,
@@ -208,6 +249,9 @@ def build_transcript_summary(rows: list[dict]) -> dict | None:
             })
 
     first = rows[0]
+    management_rows = [
+        row for row in eligible if speaker_group(row) == "management"
+    ]
     return {
         "transcript_id": first["transcript_id"],
         "ticker": first["ticker"],
@@ -219,6 +263,9 @@ def build_transcript_summary(rows: list[dict]) -> dict | None:
         ),
         "overall": coverage_summary(eligible),
         "groups": groups,
+        "topic_audience": "management",
+        "topic_classifier_version": TOPIC_CLASSIFIER_VERSION,
+        "topics": build_topic_summaries(management_rows),
     }
 
 
@@ -266,6 +313,26 @@ def get_transcript_sentiment_timeline(ticker: str) -> dict:
             if current_score is not None and previous_score is not None
             else None
         )
+
+        previous_topics = {
+            topic["topic_key"]: topic
+            for topic in (previous_call or {}).get("topics", [])
+        }
+
+        for topic in call["topics"]:
+            previous_topic = previous_topics.get(topic["topic_key"])
+            previous_topic_score = (
+                previous_topic.get("score") if previous_topic else None
+            )
+            topic["score_change"] = (
+                round(topic["score"] - previous_topic_score, 6)
+                if (
+                    topic["score"] is not None
+                    and previous_topic_score is not None
+                )
+                else None
+            )
+
         previous_call = call
 
     model_name, model_revision = model_config()
@@ -273,6 +340,8 @@ def get_transcript_sentiment_timeline(ticker: str) -> dict:
         "ticker": ticker.upper(),
         "model_name": model_name,
         "model_revision": model_revision,
+        "topic_audience": "management",
+        "topic_classifier_version": TOPIC_CLASSIFIER_VERSION,
         "calls": calls,
     }
 
@@ -297,6 +366,8 @@ def get_filing_sentiment(accession_number: str) -> dict | None:
             chunks.c.filing_date,
             chunks.c.section_key,
             chunks.c.section_title,
+            chunks.c.chunk_id,
+            chunks.c.content,
             sentiment.c.status,
             sentiment.c.sentiment_label,
             sentiment.c.sentiment_score,
@@ -344,6 +415,8 @@ def get_filing_sentiment(accession_number: str) -> dict | None:
         "model_name": model_name,
         "model_revision": model_revision,
         "overall": coverage_summary(rows),
+        "topic_classifier_version": TOPIC_CLASSIFIER_VERSION,
+        "topics": build_topic_summaries(rows),
         "sections": [
             {
                 "section_key": section_key,

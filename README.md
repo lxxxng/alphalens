@@ -491,7 +491,17 @@ section summaries even while a backfill is still running:
 GET /api/sentiment/transcripts?ticker=WMT
 GET /api/sentiment/transcripts/287
 GET /api/sentiment/filings/0000104169-21-000058
+GET /api/sentiment/topics
 ```
+
+Sentiment responses also include deterministic multi-label topic summaries
+for margins, guidance, growth, demand, costs, pricing, supply chain, capital
+allocation, risk, and technology. Transcript topic scores use management turns
+only and timeline responses include the change from the previous call. SEC
+topic scores use the same taxonomy across the selected narrative sections.
+The API returns `topic_classifier_version` and exact matched terms so this
+baseline remains reproducible and auditable before introducing a learned topic
+classifier.
 
 ### Ask RAG Questions Over Transcripts
 

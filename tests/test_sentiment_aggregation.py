@@ -6,7 +6,9 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.ml.financial_topics import classify_financial_topics
 from app.services.sentiment import (
+    build_topic_summaries,
     build_transcript_summary,
     coverage_summary,
     get_transcript_sentiment_timeline,
@@ -22,6 +24,7 @@ def _row(
     confidence=0.8,
     token_count=3,
     probabilities=None,
+    content="",
 ):
     return {
         "transcript_id": 20,
@@ -31,6 +34,7 @@ def _row(
         "speaker_role": role,
         "speaker_name": "Speaker",
         "speaker_title": None,
+        "content": content,
         "status": status,
         "sentiment_score": score,
         "confidence": confidence,
@@ -44,6 +48,50 @@ def _row(
 
 
 class SentimentAggregationTests(unittest.TestCase):
+    def test_topic_classifier_is_multi_label_and_word_bounded(self):
+        matches = classify_financial_topics(
+            "AI automation should improve operating margins; it was paid."
+        )
+        by_key = {match["topic_key"]: match for match in matches}
+
+        self.assertIn("technology_ai", by_key)
+        self.assertIn("costs_efficiency", by_key)
+        self.assertIn("margins_profitability", by_key)
+        self.assertEqual(
+            by_key["technology_ai"]["matched_terms"],
+            ["ai"],
+        )
+
+    def test_topic_summary_uses_existing_weighted_sentiment(self):
+        rows = [
+            _row(
+                score=0.8,
+                token_count=3,
+                content="Gross margin expansion continued.",
+            ),
+            _row(
+                score=-0.4,
+                token_count=1,
+                content="Operating margin remains under pressure.",
+                probabilities={
+                    "positive": 0.1,
+                    "negative": 0.7,
+                    "neutral": 0.2,
+                },
+            ),
+        ]
+
+        topics = build_topic_summaries(rows)
+        margin = next(
+            topic
+            for topic in topics
+            if topic["topic_key"] == "margins_profitability"
+        )
+
+        self.assertEqual(margin["score"], 0.5)
+        self.assertEqual(margin["eligible_items"], 2)
+        self.assertIn("gross margin", margin["matched_terms"])
+
     def test_speaker_roles_are_normalized(self):
         self.assertEqual(speaker_group(_row("executive")), "management")
         self.assertEqual(speaker_group(_row("analyst")), "analyst")
@@ -94,6 +142,29 @@ class SentimentAggregationTests(unittest.TestCase):
             ["management", "analyst"],
         )
 
+    def test_transcript_topics_describe_management_only(self):
+        summary = build_transcript_summary([
+            _row(
+                "executive",
+                score=0.6,
+                content="We delivered gross margin expansion.",
+            ),
+            _row(
+                "analyst",
+                score=-0.7,
+                content="Why is gross margin under pressure?",
+            ),
+        ])
+        margin = next(
+            topic
+            for topic in summary["topics"]
+            if topic["topic_key"] == "margins_profitability"
+        )
+
+        self.assertEqual(summary["topic_audience"], "management")
+        self.assertEqual(margin["score"], 0.6)
+        self.assertEqual(margin["eligible_items"], 1)
+
     def test_transcript_sentiment_api(self):
         result = {"transcript_id": 20, "overall": {"coverage": 1.0}}
 
@@ -121,8 +192,8 @@ class SentimentAggregationTests(unittest.TestCase):
         timeline.assert_called_once_with("wmt")
 
     def test_timeline_calculates_quarter_over_quarter_change(self):
-        first = _row(score=0.2)
-        second = _row(score=0.5)
+        first = _row(score=0.2, content="Margin pressure continued.")
+        second = _row(score=0.5, content="Margin expansion continued.")
         second.update({"transcript_id": 21, "fiscal_period": "2027Q1"})
 
         with patch(
@@ -133,6 +204,20 @@ class SentimentAggregationTests(unittest.TestCase):
 
         self.assertIsNone(result["calls"][0]["score_change"])
         self.assertEqual(result["calls"][1]["score_change"], 0.3)
+        self.assertIsNone(
+            result["calls"][0]["topics"][0]["score_change"]
+        )
+        self.assertEqual(
+            result["calls"][1]["topics"][0]["score_change"],
+            0.3,
+        )
+
+    def test_topic_taxonomy_api_is_versioned(self):
+        response = TestClient(app).get("/api/sentiment/topics")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["version"], "financial-keywords-v1")
+        self.assertGreaterEqual(len(response.json()["topics"]), 9)
 
     def test_filing_sentiment_api_returns_not_found(self):
         with patch(
