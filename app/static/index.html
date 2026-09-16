@@ -7,7 +7,7 @@
     <script src="/static/theme.js?v=20260911.2"></script>
     <!-- Version static assets so a long-running local browser cannot combine
          new markup with a stale stylesheet or script. -->
-    <link rel="stylesheet" href="/static/styles.css?v=20260911.13">
+    <link rel="stylesheet" href="/static/styles.css?v=20260916.1">
     <link rel="stylesheet" href="/static/navigation.css?v=20260911.3">
   </head>
   <body>
@@ -167,6 +167,28 @@
             </button>
           </div>
         </form>
+
+        <section class="watchlist-panel" aria-labelledby="watchlist-title">
+          <div class="watchlist-header">
+            <div>
+              <p class="eyebrow">Monitor</p>
+              <h2 id="watchlist-title">Watchlists</h2>
+            </div>
+            <button id="watchlist-add-selected" class="secondary-button watchlist-add" type="button" disabled>
+              Add Selected
+            </button>
+          </div>
+          <div class="watchlist-toolbar">
+            <select id="watchlist-select" aria-label="Active watchlist" disabled>
+              <option>Loading watchlists...</option>
+            </select>
+            <button id="watchlist-new" class="ghost-button" type="button" title="Create watchlist">New</button>
+            <button id="watchlist-rename" class="ghost-button" type="button" disabled>Rename</button>
+            <button id="watchlist-delete" class="ghost-button danger-button" type="button" disabled>Delete</button>
+          </div>
+          <p id="watchlist-status" class="watchlist-status" aria-live="polite">Loading local signals...</p>
+          <div id="watchlist-items" class="watchlist-items" aria-live="polite"></div>
+        </section>
 
         <section class="history-panel" aria-labelledby="history-title">
           <div class="history-header">
@@ -407,7 +429,25 @@
       </section>
     </main>
 
+    <dialog id="watchlist-dialog" class="watchlist-dialog">
+      <form id="watchlist-editor" method="dialog">
+        <div>
+          <p class="eyebrow">Watchlist</p>
+          <h2 id="watchlist-dialog-title">Create Watchlist</h2>
+        </div>
+        <label for="watchlist-name">
+          <span>Name</span>
+          <input id="watchlist-name" name="name" maxlength="80" required autocomplete="off">
+        </label>
+        <p id="watchlist-editor-error" class="watchlist-editor-error" aria-live="polite"></p>
+        <div class="watchlist-dialog-actions">
+          <button id="watchlist-editor-cancel" class="ghost-button" type="button">Cancel</button>
+          <button id="watchlist-editor-save" class="primary-button" type="submit">Save</button>
+        </div>
+      </form>
+    </dialog>
+
     <script src="/static/formatters.js?v=20260910.1"></script>
-    <script src="/static/app.js?v=20260911.15"></script>
+    <script src="/static/app.js?v=20260916.1"></script>
   </body>
 </html>

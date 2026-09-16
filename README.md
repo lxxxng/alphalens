@@ -70,6 +70,7 @@ Get-Content db\sql\009_research_runs.sql | docker exec -i alphalens-postgres psq
 Get-Content db\sql\010_transcript_sentiment.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\011_filing_sentiment.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\012_event_briefs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\013_watchlists.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -723,6 +724,38 @@ trading sessions.
 GET /api/market/prices?ticker=NVDA&period=1Y
 GET /api/market/prices?ticker=WMT&tickers=NVDA,COST&period=1Y
 ```
+
+### Watchlists
+
+Named watchlists persist groups of locally ingested companies in PostgreSQL.
+The query rail can add the current one-to-four ticker selection, open a
+watchlist company in the market monitor, or create, rename, and delete lists.
+Each row combines the latest adjusted close and one-session return with the
+latest stored management FinBERT sentiment and newest earnings-call or SEC
+filing event. Loading a watchlist reads local data only and does not call
+OpenAI, EarningsCalls.dev, Yahoo Finance, or the SEC.
+
+```text
+GET    /api/watchlists
+POST   /api/watchlists
+GET    /api/watchlists/{watchlist_id}
+PATCH  /api/watchlists/{watchlist_id}
+DELETE /api/watchlists/{watchlist_id}
+POST   /api/watchlists/{watchlist_id}/items
+DELETE /api/watchlists/{watchlist_id}/items/{ticker}
+```
+
+Example membership request:
+
+```json
+{
+  "tickers": ["WMT", "NVDA", "COST"]
+}
+```
+
+Migration `013_watchlists.sql` creates an empty `Core Watchlist` on first
+application. Membership inserts are idempotent, so adding an already watched
+ticker does not create duplicates.
 
 ### Saved Research History
 

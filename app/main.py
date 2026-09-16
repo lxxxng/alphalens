@@ -37,6 +37,9 @@ from app.api.evaluations import (
 from app.api.sentiment import (
     router as sentiment_router,
 )
+from app.api.watchlists import (
+    router as watchlists_router,
+)
 
 
 STATIC_DIRECTORY = (
@@ -82,6 +85,10 @@ app.include_router(
 
 app.include_router(
     sentiment_router
+)
+
+app.include_router(
+    watchlists_router
 )
 
 

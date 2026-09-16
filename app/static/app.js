@@ -82,6 +82,20 @@ const topicSignals = document.querySelector("#topic-signals");
 const researchOutput = document.querySelector(".research-output");
 const historyList = document.querySelector("#history-list");
 const historyRefreshButton = document.querySelector("#history-refresh");
+const watchlistSelect = document.querySelector("#watchlist-select");
+const watchlistAddButton = document.querySelector("#watchlist-add-selected");
+const watchlistNewButton = document.querySelector("#watchlist-new");
+const watchlistRenameButton = document.querySelector("#watchlist-rename");
+const watchlistDeleteButton = document.querySelector("#watchlist-delete");
+const watchlistStatus = document.querySelector("#watchlist-status");
+const watchlistItems = document.querySelector("#watchlist-items");
+const watchlistDialog = document.querySelector("#watchlist-dialog");
+const watchlistEditor = document.querySelector("#watchlist-editor");
+const watchlistDialogTitle = document.querySelector("#watchlist-dialog-title");
+const watchlistNameInput = document.querySelector("#watchlist-name");
+const watchlistEditorError = document.querySelector("#watchlist-editor-error");
+const watchlistEditorCancel = document.querySelector("#watchlist-editor-cancel");
+const watchlistEditorSave = document.querySelector("#watchlist-editor-save");
 const { fiscalPeriod: formatFiscalPeriod } = window.AlphaLensFormatters;
 
 // A few grounded examples make the UI useful immediately after startup.
@@ -156,6 +170,12 @@ let latestBriefHasResult = false;
 let activeBriefId = null;
 let researchLoadingStop = null;
 let latestBriefLoadingStop = null;
+let watchlists = [];
+let activeWatchlistId = Number(
+  window.localStorage.getItem("alphalens.activeWatchlist") || 0
+);
+let activeWatchlistTickers = new Set();
+let watchlistDetailRequest = 0;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const COMPANY_CHART_COLORS = ["#087f5b", "#6d4aff", "#0f8ea8", "#c24156"];
@@ -358,6 +378,331 @@ function formatHistoryDate(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+async function watchlistFetch(url, options = {}) {
+  const response = await fetch(url, options);
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Watchlist request failed.");
+  }
+
+  return data;
+}
+
+function setWatchlistStatus(message, state = "") {
+  watchlistStatus.textContent = message;
+  watchlistStatus.className = `watchlist-status ${state}`.trim();
+}
+
+function syncWatchlistAddState() {
+  const selected = selectedTickers.filter(Boolean);
+  const allPresent = selected.length > 0 && selected.every(
+    (ticker) => activeWatchlistTickers.has(ticker)
+  );
+  watchlistAddButton.disabled = !activeWatchlistId || !selected.length || allPresent;
+  watchlistAddButton.textContent = allPresent
+    ? "Already Added"
+    : selected.length > 1
+      ? `Add ${selected.length} Selected`
+      : "Add Selected";
+}
+
+function renderWatchlistSelector() {
+  watchlistSelect.replaceChildren();
+
+  if (!watchlists.length) {
+    const option = document.createElement("option");
+    option.textContent = "No watchlists yet";
+    watchlistSelect.appendChild(option);
+    watchlistSelect.disabled = true;
+    watchlistRenameButton.disabled = true;
+    watchlistDeleteButton.disabled = true;
+    syncWatchlistAddState();
+    return;
+  }
+
+  for (const watchlist of watchlists) {
+    const option = document.createElement("option");
+    option.value = String(watchlist.watchlist_id);
+    option.textContent = `${watchlist.name} (${watchlist.item_count})`;
+    watchlistSelect.appendChild(option);
+  }
+
+  watchlistSelect.value = String(activeWatchlistId);
+  watchlistSelect.disabled = false;
+  watchlistRenameButton.disabled = false;
+  watchlistDeleteButton.disabled = false;
+  syncWatchlistAddState();
+}
+
+function updateWatchlistSummary(detail) {
+  const summary = watchlists.find(
+    (item) => item.watchlist_id === detail.watchlist_id
+  );
+
+  if (summary) {
+    summary.name = detail.name;
+    summary.item_count = detail.item_count;
+    summary.updated_at = detail.updated_at;
+  }
+
+  renderWatchlistSelector();
+}
+
+function watchlistSignal(label, value, className = "") {
+  const element = document.createElement("span");
+  element.className = `watchlist-signal ${className}`.trim();
+  const caption = document.createElement("small");
+  caption.textContent = label;
+  const result = document.createElement("strong");
+  result.textContent = value;
+  element.append(caption, result);
+  return element;
+}
+
+function renderWatchlistDetail(detail) {
+  activeWatchlistId = detail.watchlist_id;
+  activeWatchlistTickers = new Set(
+    (detail.items || []).map((item) => item.ticker)
+  );
+  window.localStorage.setItem(
+    "alphalens.activeWatchlist",
+    String(activeWatchlistId)
+  );
+  watchlistItems.replaceChildren();
+  updateWatchlistSummary(detail);
+
+  if (!detail.items.length) {
+    const empty = document.createElement("p");
+    empty.className = "watchlist-empty";
+    empty.textContent = "Add the selected chart companies to begin monitoring.";
+    watchlistItems.appendChild(empty);
+    setWatchlistStatus("No companies monitored yet");
+    return;
+  }
+
+  for (const item of detail.items) {
+    const row = document.createElement("article");
+    row.className = "watchlist-item";
+    const header = document.createElement("div");
+    header.className = "watchlist-item-header";
+    const openButton = document.createElement("button");
+    openButton.type = "button";
+    openButton.className = "watchlist-company";
+    openButton.title = `Open ${item.ticker} in the market monitor`;
+    const ticker = document.createElement("strong");
+    ticker.textContent = item.ticker;
+    const company = document.createElement("span");
+    company.textContent = item.company_name || item.ticker;
+    openButton.append(ticker, company);
+    openButton.addEventListener("click", () => {
+      applyTickerSelection([item.ticker], { manual: true });
+    });
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "watchlist-remove";
+    removeButton.textContent = "x";
+    removeButton.title = `Remove ${item.ticker} from ${detail.name}`;
+    removeButton.setAttribute("aria-label", removeButton.title);
+    removeButton.addEventListener("click", () => removeWatchlistTicker(item.ticker));
+    header.append(openButton, removeButton);
+
+    const signals = document.createElement("div");
+    signals.className = "watchlist-signals";
+    const price = Number.isFinite(item.latest_price)
+      ? `$${item.latest_price.toFixed(2)}`
+      : "--";
+    const returnClass = Number.isFinite(item.daily_return)
+      ? item.daily_return >= 0 ? "positive" : "negative"
+      : "";
+    signals.append(
+      watchlistSignal("Last", price),
+      watchlistSignal("1D", formatReturn(item.daily_return), returnClass),
+      watchlistSignal(
+        formatFiscalPeriod(item.sentiment_period) || "Sentiment",
+        item.sentiment_label
+          ? `${item.sentiment_label} ${Number(item.sentiment_score).toFixed(2)}`
+          : "Pending",
+        item.sentiment_label || ""
+      )
+    );
+    row.append(header, signals);
+
+    if (item.latest_event) {
+      const event = document.createElement(item.latest_event.source_url ? "a" : "span");
+      event.className = `watchlist-event ${item.latest_event.event_type}`;
+      const eventLabel = item.latest_event.event_type === "earnings"
+        ? formatFiscalPeriod(item.latest_event.label)
+        : item.latest_event.label;
+      event.textContent = `${eventLabel} | ${formatChartDate(item.latest_event.date)}`;
+
+      if (item.latest_event.source_url) {
+        event.href = item.latest_event.source_url;
+
+        if (item.latest_event.source_url.startsWith("http")) {
+          event.target = "_blank";
+          event.rel = "noreferrer";
+        }
+      }
+
+      row.appendChild(event);
+    }
+
+    watchlistItems.appendChild(row);
+  }
+
+  setWatchlistStatus(
+    `${detail.item_count} compan${detail.item_count === 1 ? "y" : "ies"} | Local data`
+  );
+}
+
+async function loadWatchlist(watchlistId) {
+  const requestId = ++watchlistDetailRequest;
+  setWatchlistStatus("Loading price, sentiment, and event signals...", "loading");
+
+  try {
+    const detail = await watchlistFetch(`/api/watchlists/${watchlistId}`);
+
+    if (requestId === watchlistDetailRequest) {
+      renderWatchlistDetail(detail);
+    }
+  } catch (error) {
+    if (requestId === watchlistDetailRequest) {
+      watchlistItems.replaceChildren();
+      setWatchlistStatus(error.message, "error");
+    }
+  }
+}
+
+async function loadWatchlists(preferredId = activeWatchlistId) {
+  watchlistSelect.disabled = true;
+
+  try {
+    const data = await watchlistFetch("/api/watchlists");
+    watchlists = data.watchlists || [];
+    activeWatchlistId = watchlists.some(
+      (item) => item.watchlist_id === preferredId
+    )
+      ? preferredId
+      : watchlists[0]?.watchlist_id || 0;
+    renderWatchlistSelector();
+
+    if (activeWatchlistId) {
+      await loadWatchlist(activeWatchlistId);
+    } else {
+      activeWatchlistTickers = new Set();
+      watchlistItems.replaceChildren();
+      setWatchlistStatus("Create a watchlist to begin monitoring.");
+    }
+  } catch (error) {
+    watchlists = [];
+    activeWatchlistId = 0;
+    activeWatchlistTickers = new Set();
+    renderWatchlistSelector();
+    setWatchlistStatus("Watchlists unavailable. Apply database migration 013.", "error");
+  }
+}
+
+async function addSelectedToWatchlist() {
+  if (!activeWatchlistId || !selectedTickers.length) {
+    return;
+  }
+
+  watchlistAddButton.disabled = true;
+  setWatchlistStatus("Adding selected companies...", "loading");
+
+  try {
+    const detail = await watchlistFetch(
+      `/api/watchlists/${activeWatchlistId}/items`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers: selectedTickers }),
+      }
+    );
+    renderWatchlistDetail(detail);
+  } catch (error) {
+    setWatchlistStatus(error.message, "error");
+    syncWatchlistAddState();
+  }
+}
+
+async function removeWatchlistTicker(ticker) {
+  setWatchlistStatus(`Removing ${ticker}...`, "loading");
+
+  try {
+    const detail = await watchlistFetch(
+      `/api/watchlists/${activeWatchlistId}/items/${encodeURIComponent(ticker)}`,
+      { method: "DELETE" }
+    );
+    renderWatchlistDetail(detail);
+  } catch (error) {
+    setWatchlistStatus(error.message, "error");
+  }
+}
+
+function openWatchlistEditor(mode) {
+  const active = watchlists.find(
+    (item) => item.watchlist_id === activeWatchlistId
+  );
+  watchlistEditor.dataset.mode = mode;
+  watchlistDialogTitle.textContent = mode === "rename"
+    ? "Rename Watchlist"
+    : "Create Watchlist";
+  watchlistNameInput.value = mode === "rename" ? active?.name || "" : "";
+  watchlistEditorError.textContent = "";
+  watchlistDialog.showModal();
+  watchlistNameInput.focus();
+  watchlistNameInput.select();
+}
+
+async function saveWatchlistEditor() {
+  const mode = watchlistEditor.dataset.mode || "create";
+  const name = watchlistNameInput.value.trim();
+  const isRename = mode === "rename";
+  watchlistEditorSave.disabled = true;
+  watchlistEditorError.textContent = "";
+
+  try {
+    const result = await watchlistFetch(
+      isRename ? `/api/watchlists/${activeWatchlistId}` : "/api/watchlists",
+      {
+        method: isRename ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      }
+    );
+    watchlistDialog.close();
+    await loadWatchlists(result.watchlist_id);
+  } catch (error) {
+    watchlistEditorError.textContent = error.message;
+  } finally {
+    watchlistEditorSave.disabled = false;
+  }
+}
+
+async function deleteActiveWatchlist() {
+  const active = watchlists.find(
+    (item) => item.watchlist_id === activeWatchlistId
+  );
+
+  if (!active || !window.confirm(`Delete watchlist "${active.name}"?`)) {
+    return;
+  }
+
+  try {
+    await watchlistFetch(
+      `/api/watchlists/${activeWatchlistId}`,
+      { method: "DELETE" }
+    );
+    window.localStorage.removeItem("alphalens.activeWatchlist");
+    await loadWatchlists(0);
+  } catch (error) {
+    setWatchlistStatus(error.message, "error");
+  }
 }
 
 function historyMetaItem(text, className = "") {
@@ -922,6 +1267,8 @@ function renderTickerPicker() {
     option.append(input, identity);
     tickerOptions.appendChild(option);
   }
+
+  syncWatchlistAddState();
 }
 
 function selectedSourceType() {
@@ -2838,6 +3185,25 @@ latestBriefHistory.addEventListener("change", () => {
   }
 });
 
+watchlistSelect.addEventListener("change", () => {
+  const watchlistId = Number(watchlistSelect.value);
+
+  if (Number.isInteger(watchlistId) && watchlistId > 0) {
+    activeWatchlistId = watchlistId;
+    loadWatchlist(watchlistId);
+  }
+});
+
+watchlistAddButton.addEventListener("click", addSelectedToWatchlist);
+watchlistNewButton.addEventListener("click", () => openWatchlistEditor("create"));
+watchlistRenameButton.addEventListener("click", () => openWatchlistEditor("rename"));
+watchlistDeleteButton.addEventListener("click", deleteActiveWatchlist);
+watchlistEditorCancel.addEventListener("click", () => watchlistDialog.close());
+watchlistEditor.addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveWatchlistEditor();
+});
+
 latestBriefDeleteButton.addEventListener("click", deleteSavedEventBrief);
 
 chartPinButton.addEventListener("click", () => {
@@ -2888,6 +3254,7 @@ const metadataInitialization = initializeMetadata();
 checkOpenAIHealth();
 loadResearchHistory();
 loadEventBriefHistory();
+loadWatchlists();
 
 if (Number.isInteger(initialRunId) && initialRunId > 0) {
   metadataInitialization.then(() => openSavedResearchRun(initialRunId));

@@ -834,6 +834,255 @@ select:focus {
   font-size: 12px;
 }
 
+.watchlist-panel {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 19px;
+}
+
+.watchlist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.watchlist-header h2 { font-size: 15px; }
+
+.watchlist-add {
+  width: auto;
+  height: 32px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.watchlist-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 5px;
+  margin-top: 11px;
+}
+
+.watchlist-toolbar select,
+.watchlist-toolbar .ghost-button {
+  min-width: 0;
+  height: 33px;
+  min-height: 33px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
+.watchlist-toolbar .danger-button:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.watchlist-status {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.watchlist-status.loading { color: var(--amber); }
+.watchlist-status.error { color: var(--red); }
+
+.watchlist-items {
+  max-height: 330px;
+  margin-top: 9px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+
+.watchlist-item {
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0 11px;
+}
+
+.watchlist-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.watchlist-company,
+.watchlist-remove {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.watchlist-company {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 0;
+  color: var(--ink);
+  text-align: left;
+}
+
+.watchlist-company strong {
+  color: var(--blue);
+  font-size: 12px;
+}
+
+.watchlist-company span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchlist-company:hover strong { color: var(--green); }
+
+.watchlist-remove {
+  border-radius: 4px;
+  color: var(--muted);
+  padding: 3px 6px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.watchlist-remove:hover {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.watchlist-signals {
+  display: grid;
+  grid-template-columns: 0.8fr 0.7fr 1.5fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.watchlist-signal {
+  min-width: 0;
+  border-left: 1px solid var(--line);
+  padding-left: 7px;
+}
+
+.watchlist-signal:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.watchlist-signal small,
+.watchlist-signal strong { display: block; }
+
+.watchlist-signal small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.watchlist-signal strong {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.watchlist-signal.positive strong { color: var(--green); }
+.watchlist-signal.negative strong { color: var(--red); }
+.watchlist-signal.neutral strong { color: var(--muted); }
+
+.watchlist-event {
+  display: block;
+  width: fit-content;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.watchlist-event::before {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  content: "F";
+  font-size: 8px;
+  font-weight: 900;
+  vertical-align: middle;
+}
+
+.watchlist-event.earnings::before {
+  background: #7c3aed;
+  content: "E";
+}
+
+.watchlist-event.filing::before { background: #2563eb; }
+.watchlist-event:hover { color: var(--green); }
+
+.watchlist-empty {
+  margin: 0;
+  color: var(--muted);
+  padding: 14px 0;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.watchlist-dialog {
+  width: min(420px, calc(100vw - 28px));
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+}
+
+.watchlist-dialog::backdrop { background: rgba(3, 10, 8, 0.7); }
+
+.watchlist-dialog form {
+  display: grid;
+  gap: 17px;
+  padding: 22px;
+}
+
+.watchlist-dialog label {
+  display: grid;
+  gap: 6px;
+}
+
+.watchlist-dialog label > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.watchlist-editor-error {
+  min-height: 15px;
+  margin: -7px 0 0;
+  color: var(--red);
+  font-size: 10px;
+}
+
+.watchlist-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.watchlist-dialog-actions .primary-button {
+  width: auto;
+  min-width: 90px;
+  padding: 0 14px;
+}
+
 .answer-header {
   min-height: 45px;
   margin-top: 30px;
@@ -2476,14 +2725,24 @@ html[data-theme="dark"] .chart-tooltip {
   body.workspace-research .answer-panel { order: 0; }
 
   .query-panel .history-panel {
-    order: 3;
+    order: 4;
     margin-top: 0;
+    background: #101916;
+    padding: 24px 18px 30px;
+  }
+
+  .query-panel .watchlist-panel {
+    order: 3;
+    min-width: 0;
+    margin-top: 0;
+    overflow: hidden;
     background: #101916;
     padding: 24px 18px 30px;
   }
 
   html:not([data-theme="dark"]) .query-panel .brand-row,
   html:not([data-theme="dark"]) .query-panel .research-form,
+  html:not([data-theme="dark"]) .query-panel .watchlist-panel,
   html:not([data-theme="dark"]) .query-panel .history-panel {
     background: var(--surface-soft);
   }
@@ -2592,6 +2851,19 @@ html[data-theme="dark"] .chart-tooltip {
   .chart-kpis > div:nth-child(odd) { border-left: 0; }
   .chart-kpis > div:nth-child(n + 3) { border-top: 1px solid var(--line); }
 
+  .watchlist-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .watchlist-toolbar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .watchlist-toolbar select { grid-column: 1 / -1; }
+
+  .watchlist-toolbar .ghost-button { width: 100%; }
+
   .market-events { grid-template-columns: 1fr; }
 
   .signal-body { grid-template-columns: minmax(0, 1fr); }
@@ -2629,9 +2901,9 @@ html[data-theme="dark"] .chart-tooltip {
     margin: 4px 0 0;
   }
 
-  .control-grid { grid-template-columns: 1fr 1fr; }
-  .control.wide { grid-column: auto; }
-  .control:last-child { grid-column: 1 / -1; }
+  .control-grid { grid-template-columns: minmax(0, 1fr); }
+  .control.wide,
+  .control:last-child { grid-column: auto; }
 
   .source-picker {
     grid-template-columns: repeat(2, minmax(0, 1fr));

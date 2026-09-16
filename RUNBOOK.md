@@ -71,6 +71,7 @@ Get-Content -Raw db\sql\009_research_runs.sql | docker exec -i alphalens-postgre
 Get-Content -Raw db\sql\010_transcript_sentiment.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\011_filing_sentiment.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\012_event_briefs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
+Get-Content -Raw db\sql\013_watchlists.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 ```
 
 ## 6. Run all pipelines in order
@@ -174,6 +175,12 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/market/prices?ticker=WMT&tickers=NV
 
 # Saved research history (full answers are saved after POST /api/research)
 Invoke-RestMethod "http://127.0.0.1:8000/api/research/history?limit=20"
+
+# Watchlists read local prices, sentiment, and event metadata only
+$watchlists = Invoke-RestMethod "http://127.0.0.1:8000/api/watchlists"
+$watchlistId = $watchlists.watchlists[0].watchlist_id
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/watchlists/$watchlistId/items" -ContentType "application/json" -Body '{"tickers":["WMT","NVDA"]}'
+Invoke-RestMethod "http://127.0.0.1:8000/api/watchlists/$watchlistId"
 
 # Retrieval regression suite (embeddings only; no generated answers)
 python -m evals.run_retrieval
