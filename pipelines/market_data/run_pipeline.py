@@ -74,6 +74,8 @@ Command options:
 """
 
 
+import argparse
+
 from pipelines.market_data.extractor import (
     extract_market_data,
 )
@@ -87,7 +89,10 @@ from pipelines.market_data.loader import (
 )
 
 
-def run_market_pipeline():
+def run_market_pipeline(
+    tickers: list[str] | None = None,
+    start_date: str | None = None,
+):
     """
     Execute the complete AlphaLens market-data ETL pipeline.
 
@@ -106,7 +111,10 @@ def run_market_pipeline():
     print("STEP 1 - EXTRACT")
     print("========================================")
 
-    raw_data = extract_market_data()
+    raw_data = extract_market_data(
+        tickers=tickers,
+        start_date=start_date,
+    )
 
     print(
         f"Raw rows: {len(raw_data)}"
@@ -148,10 +156,30 @@ def run_market_pipeline():
         f"Rows processed: {loaded_rows}"
     )
 
+    return loaded_rows
+
 
 # ============================================================
 # Script Entry Point
 # ============================================================
 
 if __name__ == "__main__":
-    run_market_pipeline()
+    parser = argparse.ArgumentParser(
+        description="Download and load AlphaLens daily OHLCV data.",
+    )
+    parser.add_argument(
+        "--tickers",
+        nargs="+",
+        default=None,
+        help="Optional company ticker subset. SPY is added automatically.",
+    )
+    parser.add_argument(
+        "--start-date",
+        default=None,
+        help="Optional inclusive Yahoo Finance start date (YYYY-MM-DD).",
+    )
+    arguments = parser.parse_args()
+    run_market_pipeline(
+        tickers=arguments.tickers,
+        start_date=arguments.start_date,
+    )

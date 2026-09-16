@@ -192,13 +192,30 @@ import yfinance as yf
 MARKET_LOOKBACK_YEARS = 5
 
 
-def extract_market_data():
+def extract_market_data(
+    tickers: list[str] | None = None,
+    start_date: str | None = None,
+):
     """
-    Download five years of daily OHLCV data for the
-    AlphaLens stock universe plus SPY benchmark.
+    Download daily OHLCV data for a ticker scope plus SPY benchmark.
+
+    The default remains the complete AlphaLens universe and five-year
+    history. Scheduled ingestion supplies a smaller ticker list and recent
+    start date so daily refreshes stay quick while using the same ETL path.
     """
 
-    all_tickers = TICKERS + [BENCHMARK]
+    requested_tickers = []
+
+    for ticker in tickers or TICKERS:
+        normalized = str(ticker).strip().upper()
+
+        if normalized and normalized not in requested_tickers:
+            requested_tickers.append(normalized)
+
+    all_tickers = requested_tickers.copy()
+
+    if BENCHMARK not in all_tickers:
+        all_tickers.append(BENCHMARK)
 
     # Calculate a rolling five-year cutoff.
     #
@@ -210,17 +227,18 @@ def extract_market_data():
     # start:
     #     2021-08-24
     #
-    start_date = (
-        pd.Timestamp.now()
-        .normalize()
-        - pd.DateOffset(years=MARKET_LOOKBACK_YEARS)
-    )
+    if start_date is None:
+        start_date = (
+            pd.Timestamp.now()
+            .normalize()
+            - pd.DateOffset(years=MARKET_LOOKBACK_YEARS)
+        ).strftime("%Y-%m-%d")
 
     data = yf.download(
         tickers=all_tickers,
 
         # yfinance accepts a YYYY-MM-DD string.
-        start=start_date.strftime("%Y-%m-%d"),
+        start=start_date,
 
         interval="1d",
         group_by="ticker",

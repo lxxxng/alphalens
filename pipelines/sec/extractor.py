@@ -909,9 +909,11 @@ def extract_10k_10q(
 # extract_sec_filing_metadata()
 # ============================================================
 
-def extract_sec_filing_metadata() -> pd.DataFrame:
+def extract_sec_filing_metadata(
+    tickers: list[str] | None = None,
+) -> pd.DataFrame:
     """
-    Extract SEC 10-K/10-Q metadata for all AlphaLens companies.
+    Extract SEC 10-K/10-Q metadata for an AlphaLens ticker scope.
 
     Returns
     -------
@@ -942,6 +944,14 @@ def extract_sec_filing_metadata() -> pd.DataFrame:
         session
     )
 
+    target_tickers = []
+
+    for ticker in tickers or TICKERS:
+        normalized = str(ticker).strip().upper()
+
+        if normalized and normalized not in target_tickers:
+            target_tickers.append(normalized)
+
     # Store each company's DataFrame here temporarily.
     company_frames = []
 
@@ -949,7 +959,7 @@ def extract_sec_filing_metadata() -> pd.DataFrame:
     # Process each AlphaLens company
     # ========================================================
 
-    for ticker in TICKERS:
+    for ticker in target_tickers:
 
         print(
             f"\nFetching SEC filings for {ticker}..."

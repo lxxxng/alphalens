@@ -114,6 +114,35 @@
 
 .global-nav .connection-status { min-width: 142px; }
 .global-nav .theme-toggle { min-width: 86px; }
+.global-nav .alerts-button {
+  min-width: 88px;
+  margin-left: 12px;
+}
+
+.alert-indicator {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #71817b;
+}
+
+.alerts-button.has-unread .alert-indicator {
+  background: #65d6b1;
+  box-shadow: 0 0 0 3px rgba(101, 214, 177, 0.14);
+}
+
+.alerts-badge {
+  min-width: 17px;
+  height: 17px;
+  border-radius: 9px;
+  background: #dfeee9;
+  color: #0b2d22;
+  padding: 0 5px;
+  font-size: 9px;
+  line-height: 17px;
+  text-align: center;
+}
 
 .global-nav .nav-action:hover,
 .global-nav .connection-status:hover,
@@ -184,8 +213,9 @@
     margin: 4px 0 0;
   }
 
-  .global-nav .theme-toggle { grid-column: 1; }
-  .global-nav .connection-status { grid-column: 2 / -1; }
+  .global-nav .alerts-button { grid-column: 1; }
+  .global-nav .theme-toggle { grid-column: 2 / -1; }
+  .global-nav .connection-status { grid-column: 1 / -1; }
 }
 
 @media (max-width: 440px) {

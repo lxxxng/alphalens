@@ -96,6 +96,12 @@ const watchlistNameInput = document.querySelector("#watchlist-name");
 const watchlistEditorError = document.querySelector("#watchlist-editor-error");
 const watchlistEditorCancel = document.querySelector("#watchlist-editor-cancel");
 const watchlistEditorSave = document.querySelector("#watchlist-editor-save");
+const alertsButton = document.querySelector("#alerts-button");
+const alertsBadge = document.querySelector("#alerts-badge");
+const alertsPanel = document.querySelector("#alerts-panel");
+const alertsReadAllButton = document.querySelector("#alerts-read-all");
+const alertsStatus = document.querySelector("#alerts-status");
+const alertsList = document.querySelector("#alerts-list");
 const { fiscalPeriod: formatFiscalPeriod } = window.AlphaLensFormatters;
 
 // A few grounded examples make the UI useful immediately after startup.
@@ -139,6 +145,7 @@ const initialTickerMode = new URLSearchParams(
 const initialRunId = Number(
   new URLSearchParams(window.location.search).get("run_id") || 0
 );
+const initialAlertsOpen = window.location.hash === "#alerts";
 let selectedTickers = (
   initialTickerParameter
     ?.split(",")
@@ -176,6 +183,7 @@ let activeWatchlistId = Number(
 );
 let activeWatchlistTickers = new Set();
 let watchlistDetailRequest = 0;
+let alertsRequest = 0;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const COMPANY_CHART_COLORS = ["#087f5b", "#6d4aff", "#0f8ea8", "#c24156"];
@@ -378,6 +386,159 @@ function formatHistoryDate(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+async function alertFetch(url, options = {}) {
+  const response = await fetch(url, options);
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Alert request failed.");
+  }
+
+  return data;
+}
+
+function syncAlertCount(unreadCount) {
+  const count = Math.max(0, Number(unreadCount) || 0);
+  alertsBadge.textContent = count > 99 ? "99+" : String(count);
+  alertsBadge.hidden = count === 0;
+  alertsButton.classList.toggle("has-unread", count > 0);
+  alertsButton.title = count
+    ? `${count} unread event alert${count === 1 ? "" : "s"}`
+    : "No unread event alerts";
+}
+
+async function markAlertRead(alertId, reload = true) {
+  await alertFetch(`/api/alerts/${alertId}/read`, { method: "PATCH" });
+
+  if (reload) {
+    await loadAlerts();
+  }
+}
+
+async function openAlertSource(alert) {
+  try {
+    if (!alert.is_read) {
+      await markAlertRead(alert.alert_id, false);
+    }
+  } catch (error) {
+    // Opening the source remains useful even if read-state persistence fails.
+  }
+
+  if (!alert.source_url) {
+    await loadAlerts();
+    return;
+  }
+
+  if (alert.source_url.startsWith("http")) {
+    window.open(alert.source_url, "_blank", "noopener,noreferrer");
+    await loadAlerts();
+  } else {
+    window.location.href = alert.source_url;
+  }
+}
+
+function renderAlerts(data) {
+  const eventAlerts = data.alerts || [];
+  syncAlertCount(data.unread_count);
+  alertsReadAllButton.disabled = Number(data.unread_count) === 0;
+  alertsList.replaceChildren();
+
+  if (!eventAlerts.length) {
+    const empty = document.createElement("p");
+    empty.className = "alerts-empty";
+    empty.textContent = "No watched-company events have been detected yet.";
+    alertsList.appendChild(empty);
+    alertsStatus.textContent = "Monitoring scheduled ingestion";
+    alertsStatus.className = "alerts-status";
+    return;
+  }
+
+  for (const eventAlert of eventAlerts) {
+    const item = document.createElement("article");
+    item.className = `alert-item${eventAlert.is_read ? "" : " unread"}`;
+    const heading = document.createElement("div");
+    heading.className = "alert-item-heading";
+    const kind = document.createElement("span");
+    kind.className = `alert-kind ${eventAlert.event_type}`;
+    kind.textContent = eventAlert.event_type === "earnings" ? "Call" : "SEC";
+    const title = document.createElement("button");
+    title.type = "button";
+    title.className = "alert-title";
+    title.textContent = eventAlert.title;
+    title.addEventListener("click", () => openAlertSource(eventAlert));
+    heading.append(kind, title);
+
+    const message = document.createElement("p");
+    message.className = "alert-message";
+    message.textContent = eventAlert.message || "A new monitored event is available.";
+
+    const footer = document.createElement("div");
+    footer.className = "alert-footer";
+    const timestamp = document.createElement("span");
+    timestamp.textContent = eventAlert.event_date
+      ? `${formatChartDate(eventAlert.event_date)} | detected ${formatHistoryDate(eventAlert.created_at)}`
+      : `Detected ${formatHistoryDate(eventAlert.created_at)}`;
+    footer.appendChild(timestamp);
+
+    if (!eventAlert.is_read) {
+      const readButton = document.createElement("button");
+      readButton.type = "button";
+      readButton.className = "alert-read-button";
+      readButton.textContent = "Mark read";
+      readButton.addEventListener("click", async () => {
+        readButton.disabled = true;
+
+        try {
+          await markAlertRead(eventAlert.alert_id);
+        } catch (error) {
+          alertsStatus.textContent = error.message;
+          alertsStatus.className = "alerts-status error";
+          readButton.disabled = false;
+        }
+      });
+      footer.appendChild(readButton);
+    }
+
+    item.append(heading, message, footer);
+    alertsList.appendChild(item);
+  }
+
+  alertsStatus.textContent = `${eventAlerts.length} recent event${eventAlerts.length === 1 ? "" : "s"}`;
+  alertsStatus.className = "alerts-status";
+}
+
+async function loadAlerts() {
+  const requestId = ++alertsRequest;
+
+  try {
+    const data = await alertFetch("/api/alerts?limit=30");
+
+    if (requestId === alertsRequest) {
+      renderAlerts(data);
+    }
+  } catch (error) {
+    if (requestId === alertsRequest) {
+      alertsStatus.textContent = "Alerts unavailable. Apply database migration 015.";
+      alertsStatus.className = "alerts-status error";
+    }
+  }
+}
+
+function closeAlerts() {
+  alertsPanel.hidden = true;
+  alertsButton.setAttribute("aria-expanded", "false");
+}
+
+function toggleAlerts() {
+  const opening = alertsPanel.hidden;
+  alertsPanel.hidden = !opening;
+  alertsButton.setAttribute("aria-expanded", String(opening));
+
+  if (opening) {
+    loadAlerts();
+  }
 }
 
 async function watchlistFetch(url, options = {}) {
@@ -3204,6 +3365,29 @@ watchlistEditor.addEventListener("submit", (event) => {
   saveWatchlistEditor();
 });
 
+alertsButton.addEventListener("click", toggleAlerts);
+alertsReadAllButton.addEventListener("click", async () => {
+  alertsReadAllButton.disabled = true;
+
+  try {
+    await alertFetch("/api/alerts/read-all", { method: "POST" });
+    await loadAlerts();
+  } catch (error) {
+    alertsStatus.textContent = error.message;
+    alertsStatus.className = "alerts-status error";
+  }
+});
+
+document.addEventListener("click", (event) => {
+  if (
+    !alertsPanel.hidden
+    && !alertsPanel.contains(event.target)
+    && !alertsButton.contains(event.target)
+  ) {
+    closeAlerts();
+  }
+});
+
 latestBriefDeleteButton.addEventListener("click", deleteSavedEventBrief);
 
 chartPinButton.addEventListener("click", () => {
@@ -3238,6 +3422,12 @@ for (const button of workspaceViewButtons) {
 }
 
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !alertsPanel.hidden) {
+    closeAlerts();
+    alertsButton.focus();
+    return;
+  }
+
   if (event.key === "Escape" && !researchView.hidden) {
     showMarketView();
   }
@@ -3255,6 +3445,12 @@ checkOpenAIHealth();
 loadResearchHistory();
 loadEventBriefHistory();
 loadWatchlists();
+loadAlerts();
+window.setInterval(loadAlerts, 60_000);
+
+if (initialAlertsOpen) {
+  toggleAlerts();
+}
 
 if (Number.isInteger(initialRunId) && initialRunId > 0) {
   metadataInitialization.then(() => openSavedResearchRun(initialRunId));

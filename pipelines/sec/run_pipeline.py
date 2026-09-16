@@ -20,6 +20,8 @@ Pipeline:
 """
 
 
+import argparse
+
 from pipelines.sec.extractor import (
     extract_sec_filing_metadata,
 )
@@ -29,7 +31,9 @@ from pipelines.sec.loader import (
 )
 
 
-def run_sec_pipeline():
+def run_sec_pipeline(
+    tickers: list[str] | None = None,
+):
     """
     Run the AlphaLens SEC metadata ETL pipeline.
     """
@@ -42,7 +46,9 @@ def run_sec_pipeline():
     print("STEP 1 - SEC EXTRACT")
     print("========================================")
 
-    filings = extract_sec_filing_metadata()
+    filings = extract_sec_filing_metadata(
+        tickers=tickers,
+    )
 
     print(
         f"\nSEC filings extracted: "
@@ -70,7 +76,18 @@ def run_sec_pipeline():
         f"{loaded_rows}"
     )
 
+    return loaded_rows
+
 
 if __name__ == "__main__":
-
-    run_sec_pipeline()
+    parser = argparse.ArgumentParser(
+        description="Refresh SEC 10-K and 10-Q metadata.",
+    )
+    parser.add_argument(
+        "--tickers",
+        nargs="+",
+        default=None,
+        help="Optional ticker subset, for example: WMT NVDA",
+    )
+    arguments = parser.parse_args()
+    run_sec_pipeline(tickers=arguments.tickers)

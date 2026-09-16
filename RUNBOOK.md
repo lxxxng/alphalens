@@ -72,6 +72,8 @@ Get-Content -Raw db\sql\010_transcript_sentiment.sql | docker exec -i alphalens-
 Get-Content -Raw db\sql\011_filing_sentiment.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\012_event_briefs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\013_watchlists.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
+Get-Content -Raw db\sql\014_ingestion_runs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
+Get-Content -Raw db\sql\015_event_alerts.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 ```
 
 ## 6. Run all pipelines in order
@@ -181,6 +183,21 @@ $watchlists = Invoke-RestMethod "http://127.0.0.1:8000/api/watchlists"
 $watchlistId = $watchlists.watchlists[0].watchlist_id
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/watchlists/$watchlistId/items" -ContentType "application/json" -Body '{"tickers":["WMT","NVDA"]}'
 Invoke-RestMethod "http://127.0.0.1:8000/api/watchlists/$watchlistId"
+
+# Preview the watchlist ticker scope without external API calls or DB writes
+python -m pipelines.scheduled_ingestion --scope watchlists --dry-run
+
+# Run an incremental refresh now and save a timestamped local log
+.\scripts\run_scheduled_ingestion.ps1 -Scope watchlists
+
+# One-time Windows Task Scheduler registration (daily at 06:30 local time)
+.\scripts\register_ingestion_task.ps1 -DailyAt "06:30" -Scope watchlists
+
+# Inspect recent scheduler outcomes and per-stage JSON results
+docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT run_id, trigger_type, scope, tickers, status, current_stage, started_at, completed_at, error FROM ingestion_runs ORDER BY run_id DESC LIMIT 10;"
+
+# In-app watched-company alerts and unread count
+Invoke-RestMethod "http://127.0.0.1:8000/api/alerts?limit=30"
 
 # Retrieval regression suite (embeddings only; no generated answers)
 python -m evals.run_retrieval

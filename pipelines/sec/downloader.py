@@ -276,7 +276,9 @@ def get_filing_candidates(
             form_type,
             filing_date,
             accession_number,
-            primary_document
+            primary_document,
+            download_status,
+            raw_file_path
 
         FROM filings
 

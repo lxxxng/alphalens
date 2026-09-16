@@ -71,6 +71,8 @@ Get-Content db\sql\010_transcript_sentiment.sql | docker exec -i alphalens-postg
 Get-Content db\sql\011_filing_sentiment.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\012_event_briefs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\013_watchlists.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\014_ingestion_runs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\015_event_alerts.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -756,6 +758,54 @@ Example membership request:
 Migration `013_watchlists.sql` creates an empty `Core Watchlist` on first
 application. Membership inserts are idempotent, so adding an already watched
 ticker does not create duplicates.
+
+### Scheduled Ingestion
+
+The incremental scheduler uses the union of all watchlist members by default.
+It refreshes recent OHLCV data, SEC metadata and documents, earnings calls,
+missing chunks, embeddings, and pending FinBERT sentiment. PostgreSQL advisory
+locking prevents overlapping runs, while `ingestion_runs` stores each stage's
+duration, result, and error. Existing chunk IDs are never rebuilt during a
+scheduled run, so their FAISS mappings remain stable.
+
+Preview the resolved ticker scope without calling external providers:
+
+```powershell
+python -m pipelines.scheduled_ingestion --scope watchlists --dry-run
+```
+
+Run one incremental refresh manually:
+
+```powershell
+.\scripts\run_scheduled_ingestion.ps1 -Scope watchlists
+```
+
+Register the one-time Windows task at 6:30 AM each day:
+
+```powershell
+.\scripts\register_ingestion_task.ps1 -DailyAt "06:30" -Scope watchlists
+```
+
+The PC, Docker PostgreSQL container, and internet connection must be available
+at execution time. Logs are written under `data\logs\ingestion` and remain
+local. The scheduler uses the existing `.env`; it introduces no new secrets.
+
+### Event Alerts
+
+After SEC and transcript ingestion, the scheduler creates alerts only for
+watched-company records first inserted during that run. Existing backfill data
+does not create an initial alert flood, and a unique source key makes retries
+idempotent. The header inbox polls the local API every minute and supports
+opening the source, marking one event read, or marking everything read.
+
+```text
+GET   /api/alerts?limit=30
+PATCH /api/alerts/{alert_id}/read
+POST  /api/alerts/read-all
+```
+
+These are local in-app alerts. Email, Slack, or Teams delivery can be added as
+a later notification channel without changing event detection or deduplication.
 
 ### Saved Research History
 

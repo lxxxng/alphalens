@@ -17,6 +17,9 @@ data/faiss/*
 data/evals/*.json
 data/evals/history/*.json
 
+# Local scheduler logs contain machine-specific run output.
+data/logs/
+
 # Downloaded SEC filings
 data/sec/raw/
 
