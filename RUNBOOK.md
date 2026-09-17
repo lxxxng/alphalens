@@ -172,6 +172,12 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 Invoke-RestMethod "http://127.0.0.1:8000/api/models/status"
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/models/predict" -ContentType "application/json" -Body '{"tickers":["WMT","NVDA"],"event_source":"latest","research_preview":true}'
 
+# Purged expanding-window Ridge, Elastic Net, Extra Trees, XGBoost, and
+# CatBoost comparison. This writes ignored JSON and prediction artifacts under
+# data/ml and does not promote a registry model.
+.\.venv\Scripts\python.exe -m pipelines.ml.model_benchmark
+.\.venv\Scripts\python.exe -m jupyter lab notebooks\10_walk_forward_model_benchmark.ipynb
+
 # SEC narrative sentiment targets MD&A, Risk Factors, and Market Risk
 .\.venv\Scripts\python.exe -m pipelines.sec.sentiment --tickers WMT --limit 10
 

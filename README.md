@@ -316,6 +316,24 @@ The browser's Return Model Monitor applies the same policy for up to four
 selected companies. Set `ALPHALENS_MODEL_REGISTRY_DIRECTORY` only when the
 registry is stored somewhere other than `data/ml/registry`.
 
+Compare model families without tuning against the already-inspected test
+period:
+
+```powershell
+python -m pipelines.ml.model_benchmark
+jupyter lab notebooks\10_walk_forward_model_benchmark.ipynb
+```
+
+The benchmark uses four expanding training windows and purges forward-return
+labels that cross each validation boundary. It compares zero and historical
+mean baselines with fixed Ridge, Elastic Net, Extra Trees, XGBoost, and
+CatBoost candidates. Mean fold MAE is the locked selection metric; directional
+accuracy and Spearman IC remain diagnostics. The current run selected the
+shallow registered XGBoost shape as the best learned candidate, but it did not
+beat historical-mean MAE (`0.065240` versus `0.065011`). Its status therefore
+remains `no_robust_candidate`, and the benchmark cannot promote a production
+model without genuinely future holdout data.
+
 ## 5. Run the SEC Pipeline
 
 Run the SEC extractor by itself to download and display filing metadata:
