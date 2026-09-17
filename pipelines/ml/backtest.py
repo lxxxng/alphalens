@@ -276,6 +276,7 @@ def run_event_backtest(
     top_k: int = DEFAULT_TOP_K,
     min_signals: int = DEFAULT_MIN_SIGNALS,
     transaction_cost_bps: float = DEFAULT_TRANSACTION_COST_BPS,
+    strategy_name: str = "xgboost",
 ) -> BacktestResult:
     """Backtest active event forecasts using next-session market returns.
 
@@ -293,6 +294,9 @@ def run_event_backtest(
 
     if transaction_cost_bps < 0:
         raise ValueError("transaction_cost_bps cannot be negative.")
+
+    if not strategy_name.strip():
+        raise ValueError("strategy_name must not be empty.")
 
     signals = _normalize_predictions(predictions)
     close, forward_returns = _price_return_panel(prices)
@@ -379,22 +383,22 @@ def run_event_backtest(
     summary = pd.DataFrame([
         calculate_performance_metrics(
             daily["long_short_gross_return"],
-            strategy="xgboost_long_short_gross",
+            strategy=f"{strategy_name}_long_short_gross",
             turnover=daily["long_short_turnover"],
         ),
         calculate_performance_metrics(
             daily["long_short_net_return"],
-            strategy="xgboost_long_short_net",
+            strategy=f"{strategy_name}_long_short_net",
             turnover=daily["long_short_turnover"],
         ),
         calculate_performance_metrics(
             daily["long_only_gross_return"],
-            strategy="xgboost_long_only_gross",
+            strategy=f"{strategy_name}_long_only_gross",
             turnover=daily["long_only_turnover"],
         ),
         calculate_performance_metrics(
             daily["long_only_net_return"],
-            strategy="xgboost_long_only_net",
+            strategy=f"{strategy_name}_long_only_net",
             turnover=daily["long_only_turnover"],
         ),
         calculate_performance_metrics(

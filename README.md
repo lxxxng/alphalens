@@ -352,6 +352,25 @@ accuracy. Because several horizons were explored, this candidate remains
 research-only until genuinely future data and a cost-aware backtest confirm
 the result.
 
+Backtest that selected candidate using only its purged out-of-fold forecasts:
+
+```powershell
+python -m pipelines.ml.oof_backtest
+jupyter lab notebooks\12_oof_strategy_backtest.ipynb
+```
+
+The strategy keeps each 10-session forecast active from its feature-session
+close to its target date, ranks the latest signal per ticker, and reports
+top/bottom and long-only portfolios before and after 10 bps of one-way
+turnover costs. SPY is the investable market benchmark. The historical-mean
+model remains in the forecast comparison, but is not converted into a
+top/bottom portfolio because its constant within-fold prediction cannot rank
+companies without arbitrary tie-breaking. Pooled results, per-fold stability,
+event hit rate, daily returns, and position weights are written under
+`data/ml/`. This remains a research-only diagnostic: the 10-session horizon
+was selected after inspecting the same historical folds and still requires a
+genuinely future holdout.
+
 ## 5. Run the SEC Pipeline
 
 Run the SEC extractor by itself to download and display filing metadata:
