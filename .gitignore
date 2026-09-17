@@ -20,6 +20,12 @@ data/evals/history/*.json
 # Local scheduler logs contain machine-specific run output.
 data/logs/
 
+# Reproducible ML datasets and model artifacts are generated locally.
+data/ml/*.csv
+data/ml/*.parquet
+data/ml/*.joblib
+!data/ml/.gitkeep
+
 # Downloaded SEC filings
 data/sec/raw/
 

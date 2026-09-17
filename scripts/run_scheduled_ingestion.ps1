@@ -2,6 +2,9 @@ param(
     [ValidateSet("watchlists", "all")]
     [string]$Scope = "watchlists",
 
+    [ValidateRange(0, 50)]
+    [int]$MaxAutoBriefs = 5,
+
     [string]$PythonPath = ""
 )
 
@@ -26,11 +29,13 @@ Push-Location $repoRoot
 try {
     Write-Output "AlphaLens scheduled ingestion started: $(Get-Date -Format o)"
     Write-Output "Scope: $Scope"
+    Write-Output "Automatic brief limit: $MaxAutoBriefs"
     Write-Output "Log: $logPath"
 
     & $PythonPath `
         -m pipelines.scheduled_ingestion `
         --scope $Scope `
+        --max-auto-briefs $MaxAutoBriefs `
         --trigger-type scheduled 2>&1 |
         Tee-Object -FilePath $logPath
 
@@ -42,4 +47,3 @@ try {
 if ($exitCode -ne 0) {
     throw "Scheduled ingestion failed with exit code $exitCode. See $logPath"
 }
-

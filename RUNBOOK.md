@@ -74,6 +74,7 @@ Get-Content -Raw db\sql\012_event_briefs.sql | docker exec -i alphalens-postgres
 Get-Content -Raw db\sql\013_watchlists.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\014_ingestion_runs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\015_event_alerts.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
+Get-Content -Raw db\sql\016_automated_event_briefs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 ```
 
 ## 6. Run all pipelines in order
@@ -130,6 +131,18 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 # Versioned FinBERT sentiment (install requirements-ml.txt once)
 .\.venv\Scripts\python.exe -m pipelines.transcripts.sentiment --tickers WMT --limit 10
 
+# Modeling-data audit and interactive notebook (install requirements-research.txt once)
+.\.venv\Scripts\python.exe -m pipelines.ml.data_audit --horizon 30
+.\.venv\Scripts\python.exe -m jupyter lab notebooks\01_data_audit.ipynb
+
+# Point-in-time 30-session stock, SPY, and excess-return targets
+.\.venv\Scripts\python.exe -m pipelines.ml.dataset --horizon 30 --output data\ml\event_targets_30d.csv
+.\.venv\Scripts\python.exe -m jupyter lab notebooks\02_target_construction.ipynb
+
+# Point-in-time market, event, FinBERT, and topic features
+.\.venv\Scripts\python.exe -m pipelines.ml.features --horizon 30 --output data\ml\event_features_30d.csv
+.\.venv\Scripts\python.exe -m jupyter lab notebooks\03_feature_analysis.ipynb
+
 # SEC narrative sentiment targets MD&A, Risk Factors, and Market Risk
 .\.venv\Scripts\python.exe -m pipelines.sec.sentiment --tickers WMT --limit 10
 
@@ -142,6 +155,14 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/topics"
 
 # Local research UI
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# Containerized API + PostgreSQL (stop the command above before using port 8000)
+docker compose config
+docker compose up -d --build
+docker compose ps
+Invoke-RestMethod "http://127.0.0.1:8000/health"
+Invoke-RestMethod "http://127.0.0.1:8000/ready"
+docker compose logs -f app
 
 # UI metadata smoke tests
 Invoke-RestMethod "http://127.0.0.1:8000/api/metadata/tickers"
@@ -190,6 +211,9 @@ python -m pipelines.scheduled_ingestion --scope watchlists --dry-run
 # Run an incremental refresh now and save a timestamped local log
 .\scripts\run_scheduled_ingestion.ps1 -Scope watchlists
 
+# Bound OpenAI usage or disable automatic briefs with 0
+.\scripts\run_scheduled_ingestion.ps1 -Scope watchlists -MaxAutoBriefs 5
+
 # One-time Windows Task Scheduler registration (daily at 06:30 local time)
 .\scripts\register_ingestion_task.ps1 -DailyAt "06:30" -Scope watchlists
 
@@ -198,6 +222,9 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 
 # In-app watched-company alerts and unread count
 Invoke-RestMethod "http://127.0.0.1:8000/api/alerts?limit=30"
+
+# Inspect automatic brief queue, retries, and deterministic quality results
+docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT alert_id, ticker, event_type, brief_status, brief_attempt_count, brief_id, brief_evaluation->>'score' AS quality_score, brief_error FROM event_alerts ORDER BY alert_id DESC LIMIT 20;"
 
 # Retrieval regression suite (embeddings only; no generated answers)
 python -m evals.run_retrieval

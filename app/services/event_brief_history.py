@@ -53,7 +53,13 @@ def _json_value(value):
     return value.isoformat() if hasattr(value, "isoformat") else value
 
 
-def _latest_transcript(connection, table, ticker, fiscal_period=None):
+def _latest_transcript(
+    connection,
+    table,
+    ticker,
+    fiscal_period=None,
+    transcript_id=None,
+):
     statement = (
         select(
             table.c.transcript_id,
@@ -75,6 +81,9 @@ def _latest_transcript(connection, table, ticker, fiscal_period=None):
             table.c.fiscal_period == fiscal_period
         )
 
+    if transcript_id is not None:
+        statement = statement.where(table.c.transcript_id == transcript_id)
+
     row = connection.execute(statement).mappings().first()
     return (
         {key: _json_value(value) for key, value in row.items()}
@@ -83,7 +92,13 @@ def _latest_transcript(connection, table, ticker, fiscal_period=None):
     )
 
 
-def _latest_filing(connection, table, ticker, form_type=None):
+def _latest_filing(
+    connection,
+    table,
+    ticker,
+    form_type=None,
+    accession_number=None,
+):
     statement = (
         select(
             table.c.accession_number,
@@ -102,6 +117,11 @@ def _latest_filing(connection, table, ticker, form_type=None):
     if form_type:
         statement = statement.where(
             table.c.form_type == form_type
+        )
+
+    if accession_number:
+        statement = statement.where(
+            table.c.accession_number == accession_number
         )
 
     row = connection.execute(statement).mappings().first()
@@ -185,6 +205,7 @@ def get_latest_event_fingerprint(request_data: dict) -> dict:
                     transcripts,
                     ticker,
                     request_data.get("fiscal_period"),
+                    request_data.get("transcript_id"),
                 )
                 company["earnings_sentiment"] = _sentiment_versions(
                     connection,
@@ -203,6 +224,7 @@ def get_latest_event_fingerprint(request_data: dict) -> dict:
                     filings,
                     ticker,
                     request_data.get("form_type"),
+                    request_data.get("accession_number"),
                 )
                 company["filing_sentiment"] = _sentiment_versions(
                     connection,
@@ -234,6 +256,8 @@ def build_event_brief_cache_key(
         "form_type": request_data.get("form_type"),
         "top_k": request_data.get("top_k", 6),
         "focus": request_data.get("focus"),
+        "accession_number": request_data.get("accession_number"),
+        "transcript_id": request_data.get("transcript_id"),
         "chain_version": chain_version,
         "event_fingerprint": event_fingerprint,
     }
@@ -282,6 +306,8 @@ def save_event_brief(
     result: dict,
     cache_key: str,
     event_fingerprint: dict,
+    generation_source: str = "manual",
+    quality_evaluation: dict | None = None,
 ) -> int:
     """Insert one immutable brief snapshot and return its ID."""
 
@@ -297,6 +323,8 @@ def save_event_brief(
             event_type=result["event_type"],
             fiscal_period=request_data.get("fiscal_period"),
             form_type=request_data.get("form_type"),
+            accession_number=request_data.get("accession_number"),
+            transcript_id=request_data.get("transcript_id"),
             top_k=request_data.get("top_k", 6),
             focus=request_data.get("focus"),
             question=result["question"],
@@ -309,6 +337,12 @@ def save_event_brief(
             event_fingerprint=event_fingerprint,
             chain_version=result["chain_version"],
             model_name=result["model_name"],
+            generation_source=generation_source,
+            quality_evaluation=(
+                quality_evaluation
+                if quality_evaluation is not None
+                else result.get("quality_evaluation", {})
+            ),
         )
         .returning(event_briefs.c.brief_id)
     )
@@ -331,6 +365,8 @@ def list_event_briefs(limit: int = 20) -> list[dict]:
             event_briefs.c.source_count,
             event_briefs.c.chain_version,
             event_briefs.c.model_name,
+            event_briefs.c.generation_source,
+            event_briefs.c.quality_evaluation,
             event_briefs.c.created_at,
         )
         .order_by(
@@ -344,6 +380,20 @@ def list_event_briefs(limit: int = 20) -> list[dict]:
         rows = connection.execute(statement).mappings().all()
 
     return [_serialize_row(row) for row in rows]
+
+
+def update_event_brief_evaluation(brief_id: int, evaluation: dict) -> None:
+    """Attach a deterministic quality result to an existing snapshot."""
+
+    engine = get_database_engine()
+    event_briefs = get_event_briefs_table(engine)
+
+    with engine.begin() as connection:
+        connection.execute(
+            event_briefs.update()
+            .where(event_briefs.c.brief_id == brief_id)
+            .values(quality_evaluation=evaluation)
+        )
 
 
 def get_event_brief(brief_id: int) -> dict | None:

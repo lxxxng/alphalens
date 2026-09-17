@@ -351,6 +351,8 @@ def collect_brief_context(request: dict) -> dict:
             fiscal_period if event_type != "filing" else None
         ),
         form_type=form_type,
+        accession_number=request.get("accession_number"),
+        transcript_id=request.get("transcript_id"),
         source_type=source_type,
     )
     company_sentiment = {
@@ -509,6 +511,8 @@ def generate_event_brief(
     top_k: int = 6,
     tickers: list[str] | None = None,
     focus: str | None = None,
+    accession_number: str | None = None,
+    transcript_id: int | None = None,
 ) -> dict:
     """Invoke the production LCEL event-brief workflow."""
 
@@ -520,4 +524,6 @@ def generate_event_brief(
         "form_type": form_type,
         "top_k": top_k,
         "focus": focus,
+        "accession_number": accession_number,
+        "transcript_id": transcript_id,
     })

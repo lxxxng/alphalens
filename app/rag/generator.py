@@ -394,6 +394,8 @@ def collect_evidence(
     form_type: str | None = None,
     section_key: str | None = None,
     fiscal_period: str | None = None,
+    accession_number: str | None = None,
+    transcript_id: int | None = None,
     source_type: str = "auto",
 ) -> dict:
     """
@@ -499,6 +501,10 @@ def collect_evidence(
             section_key=section_key,
 
             fiscal_period=fiscal_period,
+
+            accession_number=accession_number,
+
+            transcript_id=transcript_id,
 
             source_type=source_type,
         )

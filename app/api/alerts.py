@@ -29,6 +29,13 @@ class EventAlert(BaseModel):
     is_read: bool
     read_at: Optional[str] = None
     created_at: str
+    brief_id: Optional[int] = None
+    brief_status: str = "PENDING"
+    brief_attempt_count: int = 0
+    brief_error: Optional[str] = None
+    brief_evaluation: dict = Field(default_factory=dict)
+    brief_last_attempt_at: Optional[str] = None
+    brief_generated_at: Optional[str] = None
 
 
 class EventAlertsResponse(BaseModel):

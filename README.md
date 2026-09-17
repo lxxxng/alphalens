@@ -35,6 +35,13 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
+Install the separate research environment when working with notebooks. These
+packages are intentionally excluded from the API container:
+
+```powershell
+pip install -r requirements-research.txt
+```
+
 Review `.env` and set the required database and SEC values:
 
 ```text
@@ -73,6 +80,7 @@ Get-Content db\sql\012_event_briefs.sql | docker exec -i alphalens-postgres psql
 Get-Content db\sql\013_watchlists.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\014_ingestion_runs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\015_event_alerts.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\016_automated_event_briefs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -146,6 +154,50 @@ docker exec -it alphalens-postgres psql -U alphalens -d alphalens -c "SELECT COU
 ```
 
 The row count should not double. The same ticker and trading date are updated by `ON CONFLICT` instead of inserted as duplicates.
+
+### Audit Modeling Data
+
+Before constructing targets or training a model, run the reproducible coverage
+audit against PostgreSQL:
+
+```powershell
+python -m pipelines.ml.data_audit --horizon 30
+jupyter lab notebooks\01_data_audit.ipynb
+```
+
+The audit checks OHLCV integrity, SPY alignment, filing and transcript event
+coverage, complete forward-price windows, and pinned FinBERT coverage. It also
+keeps the missing earnings-results dataset visible: earnings-surprise features
+must not be claimed or synthesized until a point-in-time source is ingested.
+
+Construct the event-level supervised-learning targets and optionally save the
+generated rows locally:
+
+```powershell
+python -m pipelines.ml.dataset --horizon 30
+python -m pipelines.ml.dataset --horizon 30 --output data\ml\event_targets_30d.csv
+jupyter lab notebooks\02_target_construction.ipynb
+```
+
+Each event is anchored to the adjusted close of the first trading session
+strictly after its observable date. The target is the stock's adjusted-close
+return over the following 30 trading sessions minus SPY over the exact same
+dates. Recent events without a complete horizon remain explicitly unavailable
+instead of being dropped or assigned a partial label.
+
+Build the point-in-time feature matrix and inspect its coverage:
+
+```powershell
+python -m pipelines.ml.features --horizon 30 --output data\ml\event_features_30d.csv
+jupyter lab notebooks\03_feature_analysis.ipynb
+```
+
+The approved model-input allowlist contains trailing market indicators, event
+metadata, token-weighted FinBERT aggregates, management-versus-analyst tone,
+and deterministic topic-level sentiment. Market features are evaluated at the
+post-event anchor close. Tests mutate all later prices and verify that the
+anchor features do not change. Target dates, future prices, identifiers, and
+the excess-return label are never included in the feature allowlist.
 
 ## 5. Run the SEC Pipeline
 
@@ -609,6 +661,37 @@ Then open:
 http://127.0.0.1:8000
 ```
 
+### Run the Application with Docker
+
+`Dockerfile` builds the custom AlphaLens/FastAPI image. Compose builds that
+image, starts it as the `app` container, and runs PostgreSQL separately from
+the official `postgres:16` image. The local `data` directory is mounted at
+`/app/data`, so FAISS indexes and evaluation reports are not copied into the
+image and survive application rebuilds.
+
+Stop any manually started server on port 8000, then run:
+
+```powershell
+docker compose config
+docker compose up -d --build
+docker compose ps
+Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-RestMethod http://127.0.0.1:8000/ready
+```
+
+`/health` checks that the API process is alive. `/ready` returns HTTP 200 only
+when PostgreSQL and both FAISS indexes are available. View application logs or
+stop the containers with:
+
+```powershell
+docker compose logs -f app
+docker compose down
+```
+
+The API image intentionally excludes PyTorch and Transformers. Build a future
+sentiment-worker image with `--build-arg INSTALL_ML=true`; the normal API reads
+sentiment already stored in PostgreSQL.
+
 The research workspace keeps the price and event chart as its primary view.
 The supporting signal monitor can switch between management-call and SEC
 narrative sentiment, compare each score with the prior event, and show current
@@ -763,7 +846,8 @@ ticker does not create duplicates.
 
 The incremental scheduler uses the union of all watchlist members by default.
 It refreshes recent OHLCV data, SEC metadata and documents, earnings calls,
-missing chunks, embeddings, and pending FinBERT sentiment. PostgreSQL advisory
+missing chunks, embeddings, and pending FinBERT sentiment. It then generates
+quality-gated briefs for queued filing and earnings alerts. PostgreSQL advisory
 locking prevents overlapping runs, while `ingestion_runs` stores each stage's
 duration, result, and error. Existing chunk IDs are never rebuilt during a
 scheduled run, so their FAISS mappings remain stable.
@@ -780,6 +864,10 @@ Run one incremental refresh manually:
 .\scripts\run_scheduled_ingestion.ps1 -Scope watchlists
 ```
 
+Automatic generation is capped at five briefs per run by default. Change the
+cap when running or registering the task with `-MaxAutoBriefs`; use `0` to
+disable generation while retaining ingestion and alert detection.
+
 Register the one-time Windows task at 6:30 AM each day:
 
 ```powershell
@@ -795,8 +883,12 @@ local. The scheduler uses the existing `.env`; it introduces no new secrets.
 After SEC and transcript ingestion, the scheduler creates alerts only for
 watched-company records first inserted during that run. Existing backfill data
 does not create an initial alert flood, and a unique source key makes retries
-idempotent. The header inbox polls the local API every minute and supports
-opening the source, marking one event read, or marking everything read.
+idempotent. Once embeddings and sentiment are current, a bounded worker targets
+the exact transcript ID or SEC accession, reuses cached snapshots, and applies
+seven deterministic publication checks covering structure, evidence, citation
+validity, ticker coverage, exact event scope, and market context. The header
+inbox polls the local API every minute and shows queued, generating, passed,
+rejected, and failed states with a direct link to saved briefs.
 
 ```text
 GET   /api/alerts?limit=30
@@ -804,8 +896,10 @@ PATCH /api/alerts/{alert_id}/read
 POST  /api/alerts/read-all
 ```
 
-These are local in-app alerts. Email, Slack, or Teams delivery can be added as
-a later notification channel without changing event detection or deduplication.
+Failed or rejected briefs are retried up to three times. Each new generation
+uses one normal brief-generation OpenAI request; the deterministic quality gate
+adds no model call. No additional secret is required. Email, Slack, or Teams
+delivery can be added later without changing event detection or deduplication.
 
 ### Saved Research History
 

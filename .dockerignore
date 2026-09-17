@@ -1,0 +1,28 @@
+.git
+.github
+.venv
+venv
+__pycache__
+*.py[cod]
+*.log
+
+# Secrets are injected when the container starts, never copied into an image.
+.env
+.env.*
+!.env.example
+
+# Runtime data is mounted separately so image rebuilds stay small and stable.
+data
+
+# Development-only artifacts.
+tests
+.pytest_cache
+.coverage
+htmlcov
+.ipynb_checkpoints
+.vscode
+.idea
+*.png
+*.jpg
+*.jpeg
+*.gif

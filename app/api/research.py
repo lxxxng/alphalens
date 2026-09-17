@@ -140,6 +140,7 @@ from app.services.event_brief_history import (
     list_event_briefs,
     save_event_brief,
 )
+from app.services.brief_quality import evaluate_event_brief
 
 from app.services.transcripts import get_transcript_detail
 
@@ -619,6 +620,10 @@ class EventBriefRequest(BaseModel):
 
     form_type: Optional[str] = Field(default=None, max_length=20)
 
+    accession_number: Optional[str] = Field(default=None, max_length=40)
+
+    transcript_id: Optional[int] = Field(default=None, ge=1)
+
     top_k: int = Field(default=6, ge=1, le=12)
 
     focus: Optional[str] = Field(default=None, max_length=2000)
@@ -653,6 +658,8 @@ class EventBriefResponse(BaseModel):
 
     cached: bool = False
 
+    generation_source: str = "manual"
+
     ticker: str
 
     tickers: list[str] = Field(default_factory=list)
@@ -673,6 +680,8 @@ class EventBriefResponse(BaseModel):
 
     sources: list[ResearchSource] = Field(default_factory=list)
 
+    quality_evaluation: dict = Field(default_factory=dict)
+
 
 class EventBriefSummary(BaseModel):
     """One lightweight entry in saved event-brief history."""
@@ -691,6 +700,10 @@ class EventBriefSummary(BaseModel):
 
     model_name: str
 
+    generation_source: str = "manual"
+
+    quality_evaluation: dict = Field(default_factory=dict)
+
     created_at: str
 
 
@@ -706,6 +719,10 @@ class SavedEventBriefDetail(EventBriefResponse):
     fiscal_period: Optional[str] = None
 
     form_type: Optional[str] = None
+
+    accession_number: Optional[str] = None
+
+    transcript_id: Optional[int] = None
 
     top_k: int
 
@@ -1122,6 +1139,12 @@ def event_research_brief(request: EventBriefRequest):
             form_type=request.form_type,
             top_k=request.top_k,
             focus=request.focus,
+            accession_number=request.accession_number,
+            transcript_id=request.transcript_id,
+        )
+        result["quality_evaluation"] = evaluate_event_brief(
+            result,
+            request_data,
         )
 
         if cache_key:

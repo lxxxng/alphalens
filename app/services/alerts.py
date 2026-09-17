@@ -45,7 +45,13 @@ def _iso(value):
 def _serialize_alert(row) -> dict:
     values = dict(row)
 
-    for key in ("event_date", "read_at", "created_at"):
+    for key in (
+        "event_date",
+        "read_at",
+        "created_at",
+        "brief_last_attempt_at",
+        "brief_generated_at",
+    ):
         values[key] = _iso(values.get(key))
 
     return values

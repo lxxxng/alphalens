@@ -1,55 +1,60 @@
 services:
+  app:
+    image: alphalens-api:local
+    container_name: alphalens-api
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # The API reads persisted sentiment. A future scheduled-worker image
+        # can set this to true to include PyTorch and Transformers.
+        INSTALL_ML: "false"
+    env_file:
+      - .env
+    environment:
+      # Containers reach each other by Compose service name, not localhost.
+      DATABASE_URL: "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      ALPHALENS_FAISS_DIRECTORY: /app/data/faiss
+      ALPHALENS_EVAL_REPORT_DIRECTORY: /app/data/evals
+    ports:
+      - "8000:8000"
+    volumes:
+      # Keep large mutable retrieval indexes and reports outside the image.
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 4
+
   postgres:
     image: postgres:16
     container_name: alphalens-postgres
     restart: unless-stopped
-
     environment:
-      # PostgreSQL username
       POSTGRES_USER: ${POSTGRES_USER}
-
-      # PostgreSQL password
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-
-      # Database that PostgreSQL creates automatically
       POSTGRES_DB: ${POSTGRES_DB}
-
     ports:
-      # Windows port : container port
-      #
-      # This allows your Python code to connect using:
-      # localhost:5432
+      # Keep host access for PowerShell scripts and local development.
       - "5432:5432"
-
     volumes:
-      # Store PostgreSQL database files in a Docker volume.
-      #
-      # This prevents your data from disappearing when the
-      # PostgreSQL container is stopped or recreated.
       - alphalens_postgres_data:/var/lib/postgresql/data
-
     healthcheck:
-      # Check whether PostgreSQL is ready to accept connections.
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-
-# ============================================================
-# Docker Volumes
-# ============================================================
-#
-# Docker manages this storage separately from the container.
-#
-# PostgreSQL container
-#       ↓
-# /var/lib/postgresql/data
-#       ↓
-# alphalens_postgres_data
-#
-# Therefore your database survives container recreation.
-# ============================================================
 
 volumes:
   alphalens_postgres_data:

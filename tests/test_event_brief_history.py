@@ -144,7 +144,14 @@ class EventBriefHistoryTests(unittest.TestCase):
             response = TestClient(app).get("/api/briefs/history")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["briefs"], [summary])
+        self.assertEqual(
+            response.json()["briefs"],
+            [{
+                **summary,
+                "generation_source": "manual",
+                "quality_evaluation": {},
+            }],
+        )
 
     def test_saved_brief_not_found_returns_404(self):
         with patch(

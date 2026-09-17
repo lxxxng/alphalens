@@ -135,6 +135,7 @@ def semantic_search(
     ticker: str | None = None,
     form_type: str | None = None,
     section_key: str | None = None,
+    accession_number: str | None = None,
     prefer_latest: bool = False,
 ):
     """
@@ -178,7 +179,7 @@ def semantic_search(
             ticker=ticker,
             form_type=form_type,
         )
-        if prefer_latest
+        if prefer_latest and accession_number is None
         else None
     )
 
@@ -188,6 +189,7 @@ def semantic_search(
             ticker,
             form_type,
             section_key,
+            accession_number,
             latest_accession,
         ]
     )
@@ -205,13 +207,16 @@ def semantic_search(
             ticker=ticker,
             form_type=form_type,
             section_key=section_key,
+            accession_number=accession_number,
         )
 
-        if latest_accession:
+        selected_accession = accession_number or latest_accession
+
+        if selected_accession:
             filtered = [
                 result
                 for result in filtered
-                if result.get("accession_number") == latest_accession
+                if result.get("accession_number") == selected_accession
             ]
 
         return filtered

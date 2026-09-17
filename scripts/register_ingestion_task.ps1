@@ -7,6 +7,9 @@ param(
     [ValidateSet("watchlists", "all")]
     [string]$Scope = "watchlists",
 
+    [ValidateRange(0, 50)]
+    [int]$MaxAutoBriefs = 5,
+
     [string]$PythonPath = ""
 )
 
@@ -31,6 +34,7 @@ $actionArguments = @(
     "-ExecutionPolicy Bypass"
     "-File `"$runner`""
     "-Scope $Scope"
+    "-MaxAutoBriefs $MaxAutoBriefs"
     "-PythonPath `"$PythonPath`""
 ) -join " "
 
@@ -53,9 +57,9 @@ Register-ScheduledTask `
     -Action $action `
     -Trigger $trigger `
     -Settings $settings `
-    -Description "Refresh AlphaLens market, SEC, transcript, embedding, and sentiment data." `
+    -Description "Refresh AlphaLens data and generate quality-gated event briefs." `
     -Force | Out-Null
 
 Write-Output "Registered '$TaskName' to run daily at $DailyAt for scope '$Scope'."
+Write-Output "Automatic briefs per run: $MaxAutoBriefs"
 Write-Output "Test it with: Start-ScheduledTask -TaskName '$TaskName'"
-

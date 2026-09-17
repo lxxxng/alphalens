@@ -200,6 +200,8 @@ def semantic_search(
     form_type: str | None = None,
     section_key: str | None = None,
     fiscal_period: str | None = None,
+    accession_number: str | None = None,
+    transcript_id: int | None = None,
     corpus: str = "filings",
     prefer_latest: bool = False,
 ):
@@ -217,6 +219,7 @@ def semantic_search(
             top_k=top_k,
             ticker=ticker,
             fiscal_period=fiscal_period,
+            transcript_id=transcript_id,
             prefer_latest=prefer_latest,
         )
 
@@ -226,6 +229,7 @@ def semantic_search(
         ticker=ticker,
         form_type=form_type,
         section_key=section_key,
+        accession_number=accession_number,
         prefer_latest=prefer_latest,
     )
 
@@ -237,6 +241,8 @@ def retrieve_evidence(
     form_type: str | None = None,
     section_key: str | None = None,
     fiscal_period: str | None = None,
+    accession_number: str | None = None,
+    transcript_id: int | None = None,
     source_type: str = "auto",
 ) -> list[dict]:
     """
@@ -267,6 +273,8 @@ def retrieve_evidence(
                     form_type=form_type,
                     section_key=section_key,
                     fiscal_period=fiscal_period,
+                    accession_number=accession_number,
+                    transcript_id=transcript_id,
                     corpus=current_source_type,
                     prefer_latest=(
                         prefer_latest_transcript
@@ -288,6 +296,8 @@ def retrieve_evidence(
                     form_type=form_type,
                     section_key=section_key,
                     fiscal_period=fiscal_period,
+                    accession_number=accession_number,
+                    transcript_id=transcript_id,
                     corpus=current_source_type,
                     prefer_latest=(
                         prefer_latest_transcript

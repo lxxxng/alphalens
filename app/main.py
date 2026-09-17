@@ -25,7 +25,7 @@ AlphaLens RAG
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.research import (
@@ -43,6 +43,7 @@ from app.api.watchlists import (
 from app.api.alerts import (
     router as alerts_router,
 )
+from app.services.readiness import check_readiness
 
 
 STATIC_DIRECTORY = (
@@ -137,6 +138,21 @@ def health():
         "status": "ok",
         "service": "alphalens",
     }
+
+
+@app.get(
+    "/ready",
+    tags=["System"],
+)
+def readiness():
+    """Report whether PostgreSQL and both FAISS indexes are usable."""
+
+    result = check_readiness()
+
+    if result["status"] != "ready":
+        return JSONResponse(status_code=503, content=result)
+
+    return result
 
 
 # ============================================================

@@ -252,6 +252,8 @@ def apply_metadata_filters(
     form_type: str | None = None,
     section_key: str | None = None,
     fiscal_period: str | None = None,
+    accession_number: str | None = None,
+    transcript_id: int | None = None,
 ):
     """
     Apply common metadata filters after FAISS search.
@@ -282,6 +284,18 @@ def apply_metadata_filters(
             fiscal_period is not None
             and result.get("fiscal_period", "").upper()
             != fiscal_period.upper()
+        ):
+            continue
+
+        if (
+            accession_number is not None
+            and result.get("accession_number") != accession_number
+        ):
+            continue
+
+        if (
+            transcript_id is not None
+            and int(result.get("transcript_id") or 0) != int(transcript_id)
         ):
             continue
 

@@ -71,6 +71,7 @@ class ScheduledIngestionTests(unittest.TestCase):
                 "event_alerts",
                 "embeddings",
                 "sentiment",
+                "automated_briefs",
             ],
         )
 

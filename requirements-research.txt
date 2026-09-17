@@ -1,0 +1,7 @@
+-r requirements.txt
+
+# Interactive analysis dependencies stay outside the API image. Modeling
+# libraries will be added here as each validated experiment requires them.
+jupyterlab==4.6.3
+matplotlib==3.11.2
+seaborn==0.13.2

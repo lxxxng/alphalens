@@ -29,6 +29,7 @@ DEFAULT_STAGES = (
     "transcripts",
     "embeddings",
     "sentiment",
+    "briefs",
 )
 
 
@@ -427,6 +428,21 @@ def _run_event_alert_stage(
     )
 
 
+def _run_automated_brief_stage(
+    tickers: list[str],
+    *,
+    max_briefs: int,
+) -> dict:
+    """Generate bounded, quality-gated briefs for queued event alerts."""
+
+    from app.services.automated_briefs import run_automated_event_briefs
+
+    return run_automated_event_briefs(
+        tickers,
+        max_briefs=max_briefs,
+    )
+
+
 def _stage_plan(
     tickers: list[str],
     stages: list[str],
@@ -435,6 +451,7 @@ def _stage_plan(
     max_transcripts_per_ticker: int,
     ingestion_run_id: int | None = None,
     run_started_at: datetime | None = None,
+    max_auto_briefs: int = 5,
 ) -> list[tuple[str, Callable[[], dict]]]:
     """Expand user-facing stage groups into ordered, observable work units."""
 
@@ -483,6 +500,15 @@ def _stage_plan(
     if "sentiment" in requested:
         plan.append(("sentiment", lambda: _run_sentiment_stage(tickers)))
 
+    if "briefs" in requested:
+        plan.append((
+            "automated_briefs",
+            lambda: _run_automated_brief_stage(
+                tickers,
+                max_briefs=max_auto_briefs,
+            ),
+        ))
+
     return plan
 
 
@@ -495,6 +521,7 @@ def run_scheduled_ingestion(
     trigger_type: str = "manual",
     market_lookback_days: int = 14,
     max_transcripts_per_ticker: int = 2,
+    max_auto_briefs: int = 5,
     dry_run: bool = False,
 ) -> dict:
     """Run an incremental refresh and persist an inspectable terminal state."""
@@ -571,6 +598,7 @@ def run_scheduled_ingestion(
             max_transcripts_per_ticker=max(1, max_transcripts_per_ticker),
             ingestion_run_id=run_id,
             run_started_at=run_started_at,
+            max_auto_briefs=max(0, max_auto_briefs),
         )
 
         print(f"Ingestion run {run_id} | tickers: {', '.join(selected_tickers)}")
@@ -580,6 +608,34 @@ def run_scheduled_ingestion(
             started = perf_counter()
             print(f"\n[START] {stage_name}", flush=True)
             _update_run(engine, table, run_id, current_stage=stage_name)
+
+            if (
+                stage_name == "automated_briefs"
+                and any(item["status"] == "FAILED" for item in results)
+            ):
+                blockers = [
+                    item["stage"]
+                    for item in results
+                    if item["status"] == "FAILED"
+                ]
+                detail = {
+                    "reason": "Earlier ingestion stages failed.",
+                    "blocking_stages": blockers,
+                }
+                results.append({
+                    "stage": stage_name,
+                    "status": "SKIPPED",
+                    "duration_ms": round((perf_counter() - started) * 1000, 1),
+                    "detail": detail,
+                    "error": None,
+                })
+                _update_run(engine, table, run_id, stage_results=results)
+                print(
+                    f"[SKIPPED] {stage_name}: failed dependencies "
+                    f"({', '.join(blockers)})",
+                    flush=True,
+                )
+                continue
 
             try:
                 detail = _json_result(operation())
@@ -643,6 +699,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--trigger-type", default="manual")
     parser.add_argument("--market-lookback-days", type=int, default=14)
     parser.add_argument("--max-transcripts-per-ticker", type=int, default=2)
+    parser.add_argument("--max-auto-briefs", type=int, default=5)
     parser.add_argument("--dry-run", action="store_true")
     return parser
 
@@ -657,6 +714,7 @@ if __name__ == "__main__":
         trigger_type=arguments.trigger_type,
         market_lookback_days=arguments.market_lookback_days,
         max_transcripts_per_ticker=arguments.max_transcripts_per_ticker,
+        max_auto_briefs=arguments.max_auto_briefs,
         dry_run=arguments.dry_run,
     )
     print("\nIngestion result:")

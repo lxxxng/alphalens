@@ -154,6 +154,7 @@ def semantic_search(
     top_k: int = DEFAULT_TOP_K,
     ticker: str | None = None,
     fiscal_period: str | None = None,
+    transcript_id: int | None = None,
     prefer_latest: bool = False,
 ):
     """
@@ -200,6 +201,7 @@ def semantic_search(
         prefer_latest
         and ticker is not None
         and fiscal_period is None
+        and transcript_id is None
     ):
         # The router sets prefer_latest only for questions that imply a
         # single recent call. Applying it here keeps the SQL detail close
@@ -215,6 +217,7 @@ def semantic_search(
         for value in [
             ticker,
             fiscal_period,
+            transcript_id,
         ]
     )
 
@@ -231,6 +234,7 @@ def semantic_search(
             results=results,
             ticker=ticker,
             fiscal_period=fiscal_period,
+            transcript_id=transcript_id,
         )
 
     return search_with_filters(

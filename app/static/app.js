@@ -439,6 +439,41 @@ async function openAlertSource(alert) {
   }
 }
 
+async function openAlertBrief(alert) {
+  if (!alert.brief_id) {
+    return;
+  }
+
+  closeAlerts();
+  setWorkspaceView("market");
+  await openSavedEventBrief(alert.brief_id);
+  latestBriefPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function buildAlertBriefStatus(eventAlert) {
+  const status = eventAlert.brief_status || "PENDING";
+  const label = document.createElement("span");
+  label.className = `alert-brief-status ${status.toLowerCase()}`;
+
+  if (status === "PASSED") {
+    const evaluation = eventAlert.brief_evaluation || {};
+    label.textContent = evaluation.total_checks
+      ? `Brief ready | ${evaluation.passed_checks}/${evaluation.total_checks} checks`
+      : "Brief ready";
+  } else if (status === "REJECTED") {
+    label.textContent = "Brief needs review";
+  } else if (status === "FAILED") {
+    label.textContent = "Brief generation failed";
+    label.title = eventAlert.brief_error || "The scheduler will retry this brief.";
+  } else if (status === "GENERATING") {
+    label.textContent = "Generating brief";
+  } else {
+    label.textContent = "Brief queued";
+  }
+
+  return label;
+}
+
 function renderAlerts(data) {
   const eventAlerts = data.alerts || [];
   syncAlertCount(data.unread_count);
@@ -473,6 +508,7 @@ function renderAlerts(data) {
     const message = document.createElement("p");
     message.className = "alert-message";
     message.textContent = eventAlert.message || "A new monitored event is available.";
+    const briefStatus = buildAlertBriefStatus(eventAlert);
 
     const footer = document.createElement("div");
     footer.className = "alert-footer";
@@ -481,6 +517,18 @@ function renderAlerts(data) {
       ? `${formatChartDate(eventAlert.event_date)} | detected ${formatHistoryDate(eventAlert.created_at)}`
       : `Detected ${formatHistoryDate(eventAlert.created_at)}`;
     footer.appendChild(timestamp);
+
+    const actions = document.createElement("div");
+    actions.className = "alert-footer-actions";
+
+    if (eventAlert.brief_id) {
+      const briefButton = document.createElement("button");
+      briefButton.type = "button";
+      briefButton.className = "alert-read-button";
+      briefButton.textContent = "Open brief";
+      briefButton.addEventListener("click", () => openAlertBrief(eventAlert));
+      actions.appendChild(briefButton);
+    }
 
     if (!eventAlert.is_read) {
       const readButton = document.createElement("button");
@@ -498,10 +546,11 @@ function renderAlerts(data) {
           readButton.disabled = false;
         }
       });
-      footer.appendChild(readButton);
+      actions.appendChild(readButton);
     }
 
-    item.append(heading, message, footer);
+    footer.appendChild(actions);
+    item.append(heading, message, briefStatus, footer);
     alertsList.appendChild(item);
   }
 
@@ -520,7 +569,7 @@ async function loadAlerts() {
     }
   } catch (error) {
     if (requestId === alertsRequest) {
-      alertsStatus.textContent = "Alerts unavailable. Apply database migration 015.";
+      alertsStatus.textContent = "Alerts unavailable. Apply database migrations through 016.";
       alertsStatus.className = "alerts-status error";
     }
   }
@@ -1036,6 +1085,7 @@ function displayEventBrief(data, statusLabel = "Current") {
   activeBriefId = data.brief_id || null;
   latestBriefScope.textContent = [
     (data.tickers || [data.ticker]).filter(Boolean).join(" / "),
+    data.generation_source === "automatic" ? "Automatic" : null,
     data.created_at
       ? `Saved ${formatHistoryDate(data.created_at)}`
       : "Latest earnings call + SEC filing",
@@ -1044,7 +1094,16 @@ function displayEventBrief(data, statusLabel = "Current") {
   latestBriefDeleteButton.disabled = !activeBriefId;
   latestBriefGenerateButton.textContent = "Refresh Brief";
   latestBriefHistory.value = activeBriefId ? String(activeBriefId) : "";
-  setLatestBriefStatus(statusLabel);
+  const quality = data.quality_evaluation || {};
+
+  if (quality.total_checks) {
+    setLatestBriefStatus(
+      `${quality.passed ? "Quality passed" : "Review"} ${quality.passed_checks}/${quality.total_checks}`,
+      quality.passed ? "" : "error"
+    );
+  } else {
+    setLatestBriefStatus(statusLabel);
+  }
 }
 
 async function openSavedEventBrief(briefId) {

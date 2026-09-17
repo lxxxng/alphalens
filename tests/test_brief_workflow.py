@@ -221,6 +221,8 @@ class BriefWorkflowTests(unittest.TestCase):
             form_type=None,
             top_k=6,
             focus=None,
+            accession_number=None,
+            transcript_id=None,
         )
 
     def test_brief_api_accepts_multiple_tickers(self):
@@ -274,6 +276,8 @@ class BriefWorkflowTests(unittest.TestCase):
             form_type=None,
             top_k=6,
             focus="Compare margins.",
+            accession_number=None,
+            transcript_id=None,
         )
 
 
