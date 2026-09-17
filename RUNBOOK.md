@@ -160,6 +160,10 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 .\.venv\Scripts\python.exe -m pipelines.ml.backtest
 .\.venv\Scripts\python.exe -m jupyter lab notebooks\07_strategy_backtest.ipynb
 
+# SHAP explanations, stability checks, and test-error slices
+.\.venv\Scripts\python.exe -m pipelines.ml.interpretability
+.\.venv\Scripts\python.exe -m jupyter lab notebooks\08_shap_error_analysis.ipynb
+
 # SEC narrative sentiment targets MD&A, Risk Factors, and Market Risk
 .\.venv\Scripts\python.exe -m pipelines.sec.sentiment --tickers WMT --limit 10
 

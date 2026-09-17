@@ -260,6 +260,19 @@ Sharpe ratio, drawdown, turnover, and SPY buy-and-hold. These assumptions are
 fixed before reading test performance; test results must not tune the model or
 portfolio rules.
 
+Explain the locked XGBoost test predictions and inspect failure slices:
+
+```powershell
+python -m pipelines.ml.interpretability
+jupyter lab notebooks\08_shap_error_analysis.ipynb
+```
+
+The interpretation pipeline verifies that the SHAP base value plus feature
+contributions reconstructs every prediction, ranks global and local drivers,
+compares importance stability across earnings calls, SEC filings, and test
+halves, and reports errors by source and ticker. SHAP describes how the model
+used its inputs; it does not establish that a feature caused future returns.
+
 ## 5. Run the SEC Pipeline
 
 Run the SEC extractor by itself to download and display filing metadata:
