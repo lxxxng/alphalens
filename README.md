@@ -35,8 +35,15 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Install the separate research environment when working with notebooks. These
-packages are intentionally excluded from the API container:
+Install the lightweight native runtime to use registered-model predictions
+from a locally started API:
+
+```powershell
+pip install -r requirements-inference.txt
+```
+
+Install the separate research environment when working with notebooks. SHAP,
+Jupyter, and the training analysis packages stay outside the API container:
 
 ```powershell
 pip install -r requirements-research.txt
@@ -288,6 +295,26 @@ reference predictions. A model becomes `champion` only when it beats the
 historical-mean test MAE and has positive net long-short Sharpe; rejected
 models remain reproducible but cannot be loaded for deployment without an
 explicit research-only override.
+
+Serve registry status and guarded event predictions through FastAPI:
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/api/models/status"
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:8000/api/models/predict" `
+  -ContentType "application/json" `
+  -Body '{"tickers":["WMT","NVDA"],"event_source":"latest","research_preview":true}'
+```
+
+Production requests load only the registry's `champion` pointer and return
+HTTP 409 when no model has passed promotion. `research_preview=true` is an
+explicit local inspection path for the latest rejected model; the response
+labels it research-only and never supplies a fabricated confidence interval.
+The browser's Return Model Monitor applies the same policy for up to four
+selected companies. Set `ALPHALENS_MODEL_REGISTRY_DIRECTORY` only when the
+registry is stored somewhere other than `data/ml/registry`.
 
 ## 5. Run the SEC Pipeline
 

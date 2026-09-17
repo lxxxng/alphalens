@@ -7,6 +7,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        # XGBoost is sufficient to serve registered return-model artifacts.
+        # SHAP and notebook libraries remain outside the web image.
+        INSTALL_INFERENCE: "true"
         # The API reads persisted sentiment. A future scheduled-worker image
         # can set this to true to include PyTorch and Transformers.
         INSTALL_ML: "false"

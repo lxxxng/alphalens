@@ -7,7 +7,7 @@
     <script src="/static/theme.js?v=20260911.2"></script>
     <!-- Version static assets so a long-running local browser cannot combine
          new markup with a stale stylesheet or script. -->
-    <link rel="stylesheet" href="/static/styles.css?v=20260916.3">
+    <link rel="stylesheet" href="/static/styles.css?v=20260917.1">
     <link rel="stylesheet" href="/static/navigation.css?v=20260916.1">
   </head>
   <body>
@@ -393,6 +393,35 @@
           </div>
           <p id="signal-empty" class="signal-empty" hidden></p>
         </section>
+
+        <section class="model-panel" aria-labelledby="model-panel-title">
+          <div class="model-panel-header">
+            <div>
+              <p class="eyebrow">Predictive Research</p>
+              <h2 id="model-panel-title">Return Model Monitor</h2>
+              <p id="model-version" class="model-version">Checking model registry...</p>
+            </div>
+            <span id="model-status" class="model-status checking">Checking</span>
+          </div>
+          <div id="model-metrics" class="model-metrics" hidden></div>
+          <div class="model-actions">
+            <label for="model-event-source">
+              <span>Event Scope</span>
+              <select id="model-event-source">
+                <option value="latest">Latest event</option>
+                <option value="earnings_call">Latest earnings call</option>
+                <option value="sec_filing">Latest SEC filing</option>
+              </select>
+            </label>
+            <button id="model-preview" class="secondary-button" type="button" disabled>
+              Run Research Preview
+            </button>
+          </div>
+          <p id="model-message" class="model-message" aria-live="polite">
+            Reading the registered model and promotion checks...
+          </p>
+          <div id="model-predictions" class="model-predictions" aria-live="polite"></div>
+        </section>
           </section>
 
           <section id="research-view" class="workspace-slide" role="tabpanel" aria-labelledby="research-tab" hidden>
@@ -473,6 +502,6 @@
     </dialog>
 
     <script src="/static/formatters.js?v=20260910.1"></script>
-    <script src="/static/app.js?v=20260916.3"></script>
+    <script src="/static/app.js?v=20260917.1"></script>
   </body>
 </html>

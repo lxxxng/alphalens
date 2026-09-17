@@ -168,6 +168,10 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 .\.venv\Scripts\python.exe -m pipelines.ml.registry
 .\.venv\Scripts\python.exe -m jupyter lab notebooks\09_model_registry.ipynb
 
+# Registry status and guarded research-only prediction smoke tests
+Invoke-RestMethod "http://127.0.0.1:8000/api/models/status"
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/models/predict" -ContentType "application/json" -Body '{"tickers":["WMT","NVDA"],"event_source":"latest","research_preview":true}'
+
 # SEC narrative sentiment targets MD&A, Risk Factors, and Market Risk
 .\.venv\Scripts\python.exe -m pipelines.sec.sentiment --tickers WMT --limit 10
 

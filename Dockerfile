@@ -6,6 +6,7 @@
 FROM python:3.12-slim AS runtime
 
 ARG INSTALL_ML=false
+ARG INSTALL_INFERENCE=true
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -16,10 +17,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt requirements-ml.txt ./
+COPY requirements.txt requirements-inference.txt requirements-ml.txt ./
 
 RUN python -m pip install --upgrade pip \
-    && python -m pip install -r requirements.txt \
+    && if [ "$INSTALL_INFERENCE" = "true" ]; then \
+         python -m pip install -r requirements-inference.txt; \
+       else \
+         python -m pip install -r requirements.txt; \
+       fi \
     && if [ "$INSTALL_ML" = "true" ]; then \
          python -m pip install -r requirements-ml.txt; \
        fi

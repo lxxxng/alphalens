@@ -43,6 +43,9 @@ from app.api.watchlists import (
 from app.api.alerts import (
     router as alerts_router,
 )
+from app.api.models import (
+    router as models_router,
+)
 from app.services.readiness import check_readiness
 
 
@@ -97,6 +100,10 @@ app.include_router(
 
 app.include_router(
     alerts_router
+)
+
+app.include_router(
+    models_router
 )
 
 

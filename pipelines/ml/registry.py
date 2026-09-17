@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata
 import json
 import os
 import re
@@ -13,25 +14,25 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-import shap
 import xgboost as xgb
 
 from pipelines.ml.backtest import BacktestResult, run_event_backtest
 from pipelines.ml.baselines import TARGET_COLUMN, validate_purged_split
 from pipelines.ml.dataset import get_database_engine, load_adjusted_prices
 from pipelines.ml.features import build_event_feature_dataset
-from pipelines.ml.interpretability import (
-    InterpretationReport,
-    analyze_experiment,
-)
 from pipelines.ml.xgboost_model import (
     XGBoostExperiment,
     metrics_to_json,
     run_xgboost_experiment,
 )
+
+
+if TYPE_CHECKING:
+    from pipelines.ml.interpretability import InterpretationReport
 
 
 REGISTRY_SCHEMA_VERSION = 1
@@ -54,6 +55,15 @@ def _utc_now() -> datetime:
     """Keep timestamp creation injectable through one small boundary."""
 
     return datetime.now(timezone.utc)
+
+
+def _package_version(name: str) -> str | None:
+    """Read optional research-library versions without importing them."""
+
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
 def _sha256(path: Path) -> str:
@@ -472,7 +482,7 @@ def register_model(
             "model_family": "xgboost",
             "library_versions": {
                 "xgboost": xgb.__version__,
-                "shap": shap.__version__,
+                "shap": _package_version("shap"),
                 "pandas": pd.__version__,
                 "numpy": np.__version__,
             },
@@ -682,6 +692,10 @@ def load_registered_model(
 
 def main() -> None:
     """Train, evaluate, explain, backtest, and register one model version."""
+
+    # SHAP is needed while packaging research artifacts, but not while the API
+    # loads an already-registered XGBoost model for inference.
+    from pipelines.ml.interpretability import analyze_experiment
 
     parser = argparse.ArgumentParser(
         description="Create an integrity-checked AlphaLens model package.",

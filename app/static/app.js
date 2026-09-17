@@ -79,6 +79,13 @@ const signalTrendLegend = document.querySelector("#signal-trend-legend");
 const signalEmpty = document.querySelector("#signal-empty");
 const topicAudience = document.querySelector("#topic-audience");
 const topicSignals = document.querySelector("#topic-signals");
+const modelVersion = document.querySelector("#model-version");
+const modelStatus = document.querySelector("#model-status");
+const modelMetrics = document.querySelector("#model-metrics");
+const modelEventSource = document.querySelector("#model-event-source");
+const modelPreviewButton = document.querySelector("#model-preview");
+const modelMessage = document.querySelector("#model-message");
+const modelPredictions = document.querySelector("#model-predictions");
 const researchOutput = document.querySelector(".research-output");
 const historyList = document.querySelector("#history-list");
 const historyRefreshButton = document.querySelector("#history-refresh");
@@ -184,6 +191,8 @@ let activeWatchlistId = Number(
 let activeWatchlistTickers = new Set();
 let watchlistDetailRequest = 0;
 let alertsRequest = 0;
+let modelRegistryStatus = null;
+let modelPredictionRequest = 0;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const COMPANY_CHART_COLORS = ["#087f5b", "#6d4aff", "#0f8ea8", "#c24156"];
@@ -225,6 +234,182 @@ function setBusy(isBusy, mode = "answer") {
   previewButton.textContent = isBusy && mode === "preview"
     ? "Loading Evidence..."
     : "Preview Evidence";
+}
+
+function setModelStatus(label, state = "") {
+  modelStatus.textContent = label;
+  modelStatus.className = `model-status ${state}`.trim();
+}
+
+function modelMetric(label, value, tone = "") {
+  const metric = document.createElement("div");
+  const caption = document.createElement("span");
+  const result = document.createElement("strong");
+  caption.textContent = label;
+  result.textContent = value;
+  result.className = tone;
+  metric.append(caption, result);
+  return metric;
+}
+
+function resetModelPredictions() {
+  modelPredictionRequest += 1;
+  modelPredictions.replaceChildren();
+
+  if (modelRegistryStatus?.latest_model) {
+    modelMessage.textContent = modelRegistryStatus.message;
+  }
+}
+
+function renderModelRegistryStatus(data) {
+  modelRegistryStatus = data;
+  modelMetrics.replaceChildren();
+
+  if (!data.latest_model) {
+    modelVersion.textContent = "No model package available";
+    setModelStatus(
+      data.serving_status === "error" ? "Registry Error" : "Unavailable",
+      "error"
+    );
+    modelMetrics.hidden = true;
+    modelPreviewButton.disabled = true;
+    modelMessage.textContent = data.message;
+    return;
+  }
+
+  const model = data.latest_model;
+  const mae = model.promotion_checks?.test_mae_improvement || {};
+  const sharpe = model.promotion_checks?.net_long_short_sharpe || {};
+  const isChampion = model.status === "champion";
+  modelVersion.textContent = `${model.family?.toUpperCase() || "MODEL"} | ${model.version}`;
+  setModelStatus(
+    isChampion ? "Champion" : "Research Only",
+    isChampion ? "ready" : "blocked"
+  );
+  modelMetrics.append(
+    modelMetric("Test MAE", Number.isFinite(mae.model_mae) ? mae.model_mae.toFixed(4) : "--"),
+    modelMetric("Baseline MAE", Number.isFinite(mae.historical_mean_mae) ? mae.historical_mean_mae.toFixed(4) : "--"),
+    modelMetric("Net L/S Sharpe", Number.isFinite(sharpe.value) ? sharpe.value.toFixed(2) : "--", sharpe.passed ? "positive" : "negative"),
+    modelMetric("Features", model.feature_count ? String(model.feature_count) : "--")
+  );
+  modelMetrics.hidden = false;
+  modelPreviewButton.disabled = !data.inference_runtime_available;
+  modelPreviewButton.textContent = isChampion
+    ? "Run Prediction"
+    : "Run Research Preview";
+  modelMessage.textContent = [data.message, ...(model.rejection_reasons || [])].join(" ");
+}
+
+async function loadModelStatus() {
+  try {
+    const response = await fetch("/api/models/status");
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not read the model registry.");
+    }
+
+    renderModelRegistryStatus(data);
+  } catch (error) {
+    renderModelRegistryStatus({
+      serving_status: "error",
+      message: error.message,
+      latest_model: null,
+      inference_runtime_available: false,
+    });
+  }
+}
+
+function renderModelPredictions(data) {
+  modelPredictions.replaceChildren();
+
+  for (const item of data.predictions || []) {
+    const card = document.createElement("article");
+    card.className = "model-prediction";
+    const header = document.createElement("div");
+    const ticker = document.createElement("strong");
+    const event = document.createElement("span");
+    const prediction = document.createElement("b");
+    const metadata = document.createElement("p");
+    ticker.textContent = item.ticker;
+    event.textContent = item.event_source === "earnings_call"
+      ? (item.fiscal_period || "Earnings call")
+      : (item.form_type || "SEC filing");
+    prediction.textContent = formatReturn(item.predicted_excess_return_30d, 2);
+    prediction.className = item.predicted_excess_return_30d >= 0
+      ? "positive"
+      : "negative";
+    metadata.textContent = `${formatChartDate(item.event_date)} | 30-session excess return vs SPY`;
+    header.append(ticker, event);
+    card.append(header, prediction, metadata);
+
+    if (item.target_available && Number.isFinite(item.realized_excess_return_30d)) {
+      const realized = document.createElement("small");
+      realized.textContent = `Realized: ${formatReturn(item.realized_excess_return_30d, 2)}`;
+      card.appendChild(realized);
+    }
+
+    modelPredictions.appendChild(card);
+  }
+
+  for (const item of data.skipped || []) {
+    const skipped = document.createElement("article");
+    skipped.className = "model-prediction skipped";
+    const ticker = document.createElement("strong");
+    const reason = document.createElement("p");
+    ticker.textContent = item.ticker;
+    reason.textContent = item.reason;
+    skipped.append(ticker, reason);
+    modelPredictions.appendChild(skipped);
+  }
+}
+
+async function runModelPrediction() {
+  if (!selectedTickers.length || !modelRegistryStatus?.latest_model) {
+    return;
+  }
+
+  const requestId = ++modelPredictionRequest;
+  const researchPreview = modelRegistryStatus.latest_model.status !== "champion";
+  modelPreviewButton.disabled = true;
+  modelPreviewButton.classList.add("is-loading");
+  modelPreviewButton.textContent = "Scoring Events...";
+  modelMessage.textContent = "Building point-in-time features and verifying the model package...";
+  modelPredictions.replaceChildren();
+
+  try {
+    const response = await fetch("/api/models/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tickers: selectedTickers,
+        event_source: modelEventSource.value,
+        research_preview: researchPreview,
+      }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Model prediction failed.");
+    }
+
+    if (requestId === modelPredictionRequest) {
+      renderModelPredictions(data);
+      modelMessage.textContent = data.disclaimer;
+    }
+  } catch (error) {
+    if (requestId === modelPredictionRequest) {
+      modelMessage.textContent = error.message;
+    }
+  } finally {
+    if (requestId === modelPredictionRequest) {
+      modelPreviewButton.disabled = !modelRegistryStatus?.inference_runtime_available;
+      modelPreviewButton.classList.remove("is-loading");
+      modelPreviewButton.textContent = researchPreview
+        ? "Run Research Preview"
+        : "Run Prediction";
+    }
+  }
 }
 
 // Long model calls do not stream server-side progress, so elapsed time and
@@ -1384,6 +1569,7 @@ async function applyTickerSelection(
 
   if (changed) {
     resetLatestBrief();
+    resetModelPredictions();
   }
 
   if (changed && refresh && metadataReady) {
@@ -3505,6 +3691,7 @@ loadResearchHistory();
 loadEventBriefHistory();
 loadWatchlists();
 loadAlerts();
+loadModelStatus();
 window.setInterval(loadAlerts, 60_000);
 
 if (initialAlertsOpen) {
@@ -3517,6 +3704,7 @@ if (Number.isInteger(initialRunId) && initialRunId > 0) {
 
 openAIHealthButton.addEventListener("click", checkOpenAIHealth);
 historyRefreshButton.addEventListener("click", loadResearchHistory);
+modelPreviewButton.addEventListener("click", runModelPrediction);
 
 if ("ResizeObserver" in window) {
   new ResizeObserver(syncHeaderHeight).observe(appHeader);
