@@ -178,6 +178,11 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/models/predict" -
 .\.venv\Scripts\python.exe -m pipelines.ml.model_benchmark
 .\.venv\Scripts\python.exe -m jupyter lab notebooks\10_walk_forward_model_benchmark.ipynb
 
+# Fixed 5/10/20/30/60-session target study with call/filing diagnostics.
+# This can nominate a future-holdout candidate but cannot promote a model.
+.\.venv\Scripts\python.exe -m pipelines.ml.target_study
+.\.venv\Scripts\python.exe -m jupyter lab notebooks\11_multi_horizon_target_study.ipynb
+
 # SEC narrative sentiment targets MD&A, Risk Factors, and Market Risk
 .\.venv\Scripts\python.exe -m pipelines.sec.sentiment --tickers WMT --limit 10
 

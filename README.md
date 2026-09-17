@@ -334,6 +334,24 @@ beat historical-mean MAE (`0.065240` versus `0.065011`). Its status therefore
 remains `no_robust_candidate`, and the benchmark cannot promote a production
 model without genuinely future holdout data.
 
+Test whether the prediction horizon is itself the main source of noise:
+
+```powershell
+python -m pipelines.ml.target_study
+jupyter lab notebooks\11_multi_horizon_target_study.ipynb
+```
+
+The target study reuses one point-in-time feature matrix while constructing
+independent 5-, 10-, 20-, 30-, and 60-session stock-minus-SPY labels. Each
+horizon uses identical purged folds and one fixed representative from every
+model family. The current study nominated the 10-session Elastic Net as a
+`fresh_holdout_candidate`: it improved mean fold MAE by `1.17%`, beat the
+historical mean in three of four folds, and achieved pooled Spearman IC of
+`0.162`. Earnings-call and SEC-filing slices both had roughly 58% directional
+accuracy. Because several horizons were explored, this candidate remains
+research-only until genuinely future data and a cost-aware backtest confirm
+the result.
+
 ## 5. Run the SEC Pipeline
 
 Run the SEC extractor by itself to download and display filing metadata:

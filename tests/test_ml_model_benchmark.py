@@ -169,6 +169,22 @@ class WalkForwardBenchmarkTests(unittest.TestCase):
                 include_topics=False,
             )
 
+    def test_accepts_an_explicit_non_default_target_column(self):
+        dataset = _benchmark_dataset()
+        dataset["excess_return_10d"] = dataset["excess_return_30d"] * 0.5
+        candidates = TEST_CANDIDATES[:3]
+        result = run_walk_forward_benchmark(
+            dataset,
+            fold_windows=TEST_FOLDS,
+            candidates=candidates,
+            include_topics=False,
+            target_column="excess_return_10d",
+        )
+
+        self.assertEqual(result.target_column, "excess_return_10d")
+        self.assertIn("excess_return_10d", result.oof_predictions.columns)
+        self.assertEqual(benchmark_to_json(result)["target"], "excess_return_10d")
+
 
 if __name__ == "__main__":
     unittest.main()

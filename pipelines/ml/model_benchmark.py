@@ -17,7 +17,6 @@ from sklearn.preprocessing import StandardScaler
 
 from pipelines.ml.baselines import (
     TARGET_COLUMN,
-    _prediction_frame,
     evaluate_predictions,
 )
 from pipelines.ml.features import (
@@ -65,6 +64,7 @@ class BenchmarkResult:
     folds: tuple[WalkForwardFold, ...]
     candidates: tuple[CandidateSpec, ...]
     feature_columns: tuple[str, ...]
+    target_column: str
     fold_metrics: pd.DataFrame
     summary: pd.DataFrame
     oof_predictions: pd.DataFrame
@@ -148,7 +148,10 @@ DEFAULT_CANDIDATES = (
 )
 
 
-def _labeled_dataset(dataset: pd.DataFrame) -> pd.DataFrame:
+def _labeled_dataset(
+    dataset: pd.DataFrame,
+    target_column: str,
+) -> pd.DataFrame:
     """Normalize the chronology used by every walk-forward fold."""
 
     required = {
@@ -159,7 +162,7 @@ def _labeled_dataset(dataset: pd.DataFrame) -> pd.DataFrame:
         "feature_as_of_date",
         "target_trading_date",
         "target_available",
-        TARGET_COLUMN,
+        target_column,
     }
     missing = required - set(dataset.columns)
 
@@ -181,7 +184,7 @@ def _labeled_dataset(dataset: pd.DataFrame) -> pd.DataFrame:
     return labeled.dropna(subset=[
         "feature_as_of_date",
         "target_trading_date",
-        TARGET_COLUMN,
+        target_column,
     ]).sort_values(
         ["feature_as_of_date", "ticker", "event_source", "event_id"],
         kind="stable",
@@ -192,13 +195,14 @@ def make_walk_forward_folds(
     dataset: pd.DataFrame,
     *,
     fold_windows: tuple[tuple[str, str], ...] = DEFAULT_FOLD_WINDOWS,
+    target_column: str = TARGET_COLUMN,
 ) -> tuple[WalkForwardFold, ...]:
     """Create expanding folds while purging labels that cross either boundary."""
 
     if not fold_windows:
         raise ValueError("At least one walk-forward fold is required.")
 
-    labeled = _labeled_dataset(dataset)
+    labeled = _labeled_dataset(dataset, target_column)
     folds = []
     previous_start = None
 
@@ -365,10 +369,11 @@ def _fold_prediction(
     fold: WalkForwardFold,
     candidate: CandidateSpec,
     features: tuple[str, ...],
+    target_column: str,
 ) -> tuple[dict, pd.DataFrame]:
     """Fit one fold using only prior labels and return auditable predictions."""
 
-    train_y = fold.train[TARGET_COLUMN]
+    train_y = fold.train[target_column]
 
     if candidate.family == "baseline_zero":
         predictions = np.zeros(len(fold.validation))
@@ -380,7 +385,7 @@ def _fold_prediction(
         predictions = estimator.predict(fold.validation[list(features)])
 
     metrics = evaluate_predictions(
-        fold.validation[TARGET_COLUMN],
+        fold.validation[target_column],
         predictions,
         model_name=candidate.name,
         split_name=fold.name,
@@ -394,10 +399,23 @@ def _fold_prediction(
         "purged_rows": len(fold.purged),
         "parameters": dict(candidate.parameters),
     })
-    prediction_frame = _prediction_frame(
-        fold.validation,
-        predictions,
-        candidate.name,
+    prediction_frame = fold.validation[[
+        "event_key",
+        "ticker",
+        "event_source",
+        "event_date",
+        "feature_as_of_date",
+        "target_trading_date",
+        target_column,
+    ]].copy()
+    prediction_frame["model"] = candidate.name
+    prediction_frame["prediction"] = np.asarray(predictions, dtype=float)
+    prediction_frame["residual"] = (
+        prediction_frame[target_column] - prediction_frame["prediction"]
+    )
+    prediction_frame["direction_correct"] = (
+        (prediction_frame["prediction"] > 0)
+        == (prediction_frame[target_column] > 0)
     )
     prediction_frame.insert(0, "fold", fold.name)
     prediction_frame.insert(2, "family", candidate.family)
@@ -407,6 +425,7 @@ def _fold_prediction(
 def _summarize_candidates(
     fold_metrics: pd.DataFrame,
     predictions: pd.DataFrame,
+    target_column: str,
 ) -> pd.DataFrame:
     """Combine fold stability with pooled out-of-fold prediction quality."""
 
@@ -418,7 +437,7 @@ def _summarize_candidates(
     ):
         model_predictions = predictions.loc[predictions["model"] == model]
         pooled = evaluate_predictions(
-            model_predictions[TARGET_COLUMN],
+            model_predictions[target_column],
             model_predictions["prediction"],
             model_name=model,
             split_name="walk_forward_oof",
@@ -519,6 +538,7 @@ def run_walk_forward_benchmark(
     fold_windows: tuple[tuple[str, str], ...] = DEFAULT_FOLD_WINDOWS,
     candidates: tuple[CandidateSpec, ...] = DEFAULT_CANDIDATES,
     include_topics: bool = True,
+    target_column: str = TARGET_COLUMN,
 ) -> BenchmarkResult:
     """Evaluate fixed model candidates across purged expanding-time folds."""
 
@@ -539,7 +559,14 @@ def run_walk_forward_benchmark(
             + ", ".join(sorted(missing_features))
         )
 
-    folds = make_walk_forward_folds(dataset, fold_windows=fold_windows)
+    if not target_column.strip():
+        raise ValueError("target_column must not be empty.")
+
+    folds = make_walk_forward_folds(
+        dataset,
+        fold_windows=fold_windows,
+        target_column=target_column,
+    )
     metric_rows = []
     prediction_frames = []
 
@@ -549,18 +576,24 @@ def run_walk_forward_benchmark(
                 fold,
                 candidate,
                 features,
+                target_column,
             )
             metric_rows.append(metrics)
             prediction_frames.append(predictions)
 
     fold_metrics = pd.DataFrame(metric_rows)
     oof_predictions = pd.concat(prediction_frames, ignore_index=True)
-    summary = _summarize_candidates(fold_metrics, oof_predictions)
+    summary = _summarize_candidates(
+        fold_metrics,
+        oof_predictions,
+        target_column,
+    )
     selection = _selection_summary(summary, fold_metrics)
     return BenchmarkResult(
         folds=folds,
         candidates=candidates,
         feature_columns=features,
+        target_column=target_column,
         fold_metrics=fold_metrics,
         summary=summary,
         oof_predictions=oof_predictions,
@@ -572,7 +605,7 @@ def benchmark_to_json(result: BenchmarkResult) -> dict:
     """Serialize the full benchmark contract for reports and later review."""
 
     return {
-        "target": TARGET_COLUMN,
+        "target": result.target_column,
         "feature_count": len(result.feature_columns),
         "feature_columns": list(result.feature_columns),
         "selection": result.selection,
