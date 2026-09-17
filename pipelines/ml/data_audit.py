@@ -35,9 +35,7 @@ DATASETS = (
         "earnings sentiment",
         True,
     ),
-    # The planned earnings-surprise feature needs a dedicated point-in-time
-    # source. Keeping it in the inventory makes that gap visible in reports.
-    ("earnings_results", "earnings fundamentals", False),
+    ("earnings_results", "earnings fundamentals", True),
 )
 
 FILING_SENTIMENT_SECTIONS = (
@@ -474,8 +472,17 @@ def build_findings(
 
     if "earnings_results" in unavailable:
         findings.append(
-            "Earnings-surprise features are not available yet; add a "
-            "point-in-time earnings-results source before using them."
+            "Earnings-result ingestion is unavailable; apply migration 017 "
+            "and run pipelines.earnings_results.run_pipeline."
+        )
+    else:
+        result_rows = inventory.loc[
+            inventory["dataset"] == "earnings_results",
+            "rows",
+        ].iloc[0]
+        findings.append(
+            f"The point-in-time earnings-result corpus contains "
+            f"{int(result_rows or 0):,} announced EPS observations."
         )
 
     equities = market_coverage[market_coverage["ticker"] != "SPY"]

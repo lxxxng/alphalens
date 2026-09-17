@@ -78,6 +78,16 @@ SENTIMENT_FEATURE_COLUMNS = (
     "sentiment_change_from_prior",
 )
 
+EARNINGS_RESULT_FEATURE_COLUMNS = (
+    "eps_estimate",
+    "reported_eps",
+    "eps_surprise",
+    "eps_surprise_pct",
+    "eps_surprise_direction",
+    "prior_eps_surprise_pct",
+    "eps_surprise_change",
+)
+
 TOPIC_FEATURE_COLUMNS = tuple(
     column
     for topic in TOPIC_TAXONOMY
@@ -95,6 +105,7 @@ def model_feature_columns(include_topics: bool = True) -> tuple[str, ...]:
         MARKET_FEATURE_COLUMNS
         + EVENT_FEATURE_COLUMNS
         + SENTIMENT_FEATURE_COLUMNS
+        + EARNINGS_RESULT_FEATURE_COLUMNS
     )
     return columns + TOPIC_FEATURE_COLUMNS if include_topics else columns
 
@@ -109,6 +120,161 @@ def load_feature_prices(engine) -> pd.DataFrame:
             ORDER BY ticker, trading_date
         """),
         engine,
+    )
+
+
+def load_earnings_results(engine) -> pd.DataFrame:
+    """Load announced EPS results used by earnings-call event features."""
+
+    return pd.read_sql_query(
+        text("""
+            SELECT
+                ticker,
+                earnings_date,
+                earnings_timestamp,
+                eps_estimate,
+                reported_eps,
+                eps_surprise,
+                eps_surprise_pct
+            FROM earnings_results
+            ORDER BY ticker, earnings_date
+        """),
+        engine,
+    )
+
+
+def attach_earnings_result_features(
+    events: pd.DataFrame,
+    results: pd.DataFrame,
+    *,
+    max_match_days: int = 3,
+) -> pd.DataFrame:
+    """Attach the nearest observable result to each earnings-call event.
+
+    Calls and provider result timestamps can differ by a calendar day because
+    of time zones and after-hours scheduling. A bounded nearest-date match
+    handles that discrepancy while the anchor-date check prevents a result
+    that was not yet observable from becoming a feature.
+    """
+
+    required_events = {
+        "event_key",
+        "event_source",
+        "ticker",
+        "event_date",
+        "anchor_trading_date",
+    }
+    required_results = {
+        "ticker",
+        "earnings_date",
+        "eps_estimate",
+        "reported_eps",
+        "eps_surprise",
+        "eps_surprise_pct",
+    }
+
+    if not required_events.issubset(events.columns):
+        raise ValueError("events is missing earnings-result join columns.")
+
+    if not required_results.issubset(results.columns):
+        raise ValueError("results is missing earnings-result feature columns.")
+
+    if max_match_days < 0:
+        raise ValueError("max_match_days cannot be negative.")
+
+    output = events.copy()
+    output["event_date"] = pd.to_datetime(
+        output["event_date"],
+        errors="coerce",
+    )
+    output["anchor_trading_date"] = pd.to_datetime(
+        output["anchor_trading_date"],
+        errors="coerce",
+    )
+    normalized = results.copy()
+    normalized["ticker"] = normalized["ticker"].astype(str).str.upper()
+    normalized["earnings_date"] = pd.to_datetime(
+        normalized["earnings_date"],
+        errors="coerce",
+    )
+    normalized = normalized.dropna(subset=[
+        "ticker",
+        "earnings_date",
+        "reported_eps",
+    ]).sort_values(
+        ["ticker", "earnings_date"],
+        kind="stable",
+    )
+    normalized["prior_eps_surprise_pct"] = (
+        normalized.groupby("ticker")["eps_surprise_pct"].shift()
+    )
+    normalized["eps_surprise_change"] = (
+        normalized["eps_surprise_pct"]
+        - normalized["prior_eps_surprise_pct"]
+    )
+    normalized["eps_surprise_direction"] = np.sign(
+        pd.to_numeric(normalized["eps_surprise_pct"], errors="coerce")
+    )
+
+    feature_rows = []
+    by_ticker = {
+        ticker: frame
+        for ticker, frame in normalized.groupby("ticker", sort=False)
+    }
+
+    for event in output.itertuples(index=False):
+        empty = {
+            "earnings_result_date": pd.NaT,
+            "earnings_result_match_days": float("nan"),
+            **{
+                column: float("nan")
+                for column in EARNINGS_RESULT_FEATURE_COLUMNS
+            },
+        }
+
+        if (
+            event.event_source != "earnings_call"
+            or pd.isna(event.event_date)
+            or pd.isna(event.anchor_trading_date)
+        ):
+            feature_rows.append(empty)
+            continue
+
+        candidates = by_ticker.get(str(event.ticker).upper())
+
+        if candidates is None:
+            feature_rows.append(empty)
+            continue
+
+        eligible = candidates.loc[
+            candidates["earnings_date"] <= event.anchor_trading_date
+        ].copy()
+        eligible["match_days"] = (
+            eligible["earnings_date"] - event.event_date
+        ).dt.days.abs()
+        eligible = eligible.loc[eligible["match_days"] <= max_match_days]
+
+        if eligible.empty:
+            feature_rows.append(empty)
+            continue
+
+        match = eligible.sort_values(
+            ["match_days", "earnings_date"],
+            ascending=[True, False],
+            kind="stable",
+        ).iloc[0]
+        feature_rows.append({
+            "earnings_result_date": match["earnings_date"],
+            "earnings_result_match_days": int(match["match_days"]),
+            **{
+                column: match[column]
+                for column in EARNINGS_RESULT_FEATURE_COLUMNS
+            },
+        })
+
+    return pd.concat(
+        [output.reset_index(drop=True), pd.DataFrame(feature_rows)],
+        axis=1,
     )
 
 
@@ -519,6 +685,10 @@ def build_event_feature_dataset(
         load_feature_prices(resolved_engine)
     )
     featured = attach_market_features(targets, panel)
+    featured = attach_earnings_result_features(
+        featured,
+        load_earnings_results(resolved_engine),
+    )
     sentiment = aggregate_sentiment_features(
         load_sentiment_items(resolved_engine),
         include_topics=include_topics,
@@ -557,6 +727,7 @@ def validate_feature_dataset(
         )
 
     anchored = dataset["feature_as_of_date"].notna()
+    matched_results = dataset["earnings_result_date"].notna()
     checks = {
         "rows": len(dataset),
         "labeled_rows": int(dataset["target_available"].sum()),
@@ -568,6 +739,14 @@ def validate_feature_dataset(
         "feature_date_not_after_event": int((
             dataset.loc[anchored, "feature_as_of_date"]
             <= dataset.loc[anchored, "event_date"]
+        ).sum()),
+        "earnings_result_after_anchor": int((
+            dataset.loc[matched_results, "earnings_result_date"]
+            > dataset.loc[matched_results, "anchor_trading_date"]
+        ).sum()),
+        "earnings_result_on_non_call": int((
+            dataset.loc[matched_results, "event_source"]
+            != "earnings_call"
         ).sum()),
         "infinite_feature_values": int(np.isinf(
             dataset[list(model_feature_columns(include_topics))]

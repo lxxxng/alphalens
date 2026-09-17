@@ -6,6 +6,7 @@ import pandas as pd
 
 from pipelines.ml.features import (
     aggregate_sentiment_features,
+    attach_earnings_result_features,
     attach_market_features,
     calculate_market_feature_panel,
     model_feature_columns,
@@ -136,6 +137,79 @@ class SentimentFeatureTests(unittest.TestCase):
 
         self.assertAlmostEqual(result["sentiment_coverage"], 0.5)
         self.assertEqual(int(result["sentiment_scored_items"]), 1)
+
+
+class EarningsResultFeatureTests(unittest.TestCase):
+    def test_matches_calls_and_calculates_prior_surprise(self):
+        events = pd.DataFrame([
+            {
+                "event_key": "earnings_call:1",
+                "event_source": "earnings_call",
+                "ticker": "WMT",
+                "event_date": "2026-08-20",
+                "anchor_trading_date": "2026-08-21",
+            },
+            {
+                "event_key": "sec_filing:a",
+                "event_source": "sec_filing",
+                "ticker": "WMT",
+                "event_date": "2026-08-21",
+                "anchor_trading_date": "2026-08-24",
+            },
+        ])
+        results = pd.DataFrame([
+            {
+                "ticker": "WMT",
+                "earnings_date": "2026-05-21",
+                "eps_estimate": 0.66,
+                "reported_eps": 0.66,
+                "eps_surprise": 0.0,
+                "eps_surprise_pct": 0.0019,
+            },
+            {
+                "ticker": "WMT",
+                "earnings_date": "2026-08-20",
+                "eps_estimate": 0.74,
+                "reported_eps": 0.81,
+                "eps_surprise": 0.07,
+                "eps_surprise_pct": 0.0927,
+            },
+        ])
+
+        matched = attach_earnings_result_features(events, results)
+
+        self.assertAlmostEqual(matched.loc[0, "eps_surprise_pct"], 0.0927)
+        self.assertAlmostEqual(
+            matched.loc[0, "prior_eps_surprise_pct"],
+            0.0019,
+        )
+        self.assertAlmostEqual(
+            matched.loc[0, "eps_surprise_change"],
+            0.0908,
+        )
+        self.assertEqual(matched.loc[0, "eps_surprise_direction"], 1.0)
+        self.assertTrue(pd.isna(matched.loc[1, "reported_eps"]))
+
+    def test_does_not_use_result_after_feature_anchor(self):
+        events = pd.DataFrame([{
+            "event_key": "earnings_call:1",
+            "event_source": "earnings_call",
+            "ticker": "WMT",
+            "event_date": "2026-08-20",
+            "anchor_trading_date": "2026-08-21",
+        }])
+        results = pd.DataFrame([{
+            "ticker": "WMT",
+            "earnings_date": "2026-08-22",
+            "eps_estimate": 1.0,
+            "reported_eps": 1.1,
+            "eps_surprise": 0.1,
+            "eps_surprise_pct": 0.1,
+        }])
+
+        matched = attach_earnings_result_features(events, results)
+
+        self.assertTrue(pd.isna(matched.loc[0, "reported_eps"]))
 
 
 if __name__ == "__main__":

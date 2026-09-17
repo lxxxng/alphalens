@@ -62,6 +62,7 @@ class ScheduledIngestionTests(unittest.TestCase):
             [name for name, _ in plan],
             [
                 "market",
+                "earnings_results",
                 "sec_metadata",
                 "sec_documents",
                 "sec_sections",

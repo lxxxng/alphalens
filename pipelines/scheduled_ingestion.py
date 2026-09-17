@@ -25,6 +25,7 @@ load_dotenv()
 INGESTION_LOCK_ID = 8_140_501
 DEFAULT_STAGES = (
     "market",
+    "earnings",
     "sec",
     "transcripts",
     "embeddings",
@@ -175,6 +176,17 @@ def _run_market_stage(tickers: list[str], lookback_days: int) -> dict:
     start_date = (date.today() - timedelta(days=lookback_days)).isoformat()
     rows = run_market_pipeline(tickers=tickers, start_date=start_date)
     return {"rows_processed": rows, "start_date": start_date}
+
+
+def _run_earnings_results_stage(tickers: list[str]) -> dict:
+    """Refresh recent announced EPS results for the selected companies."""
+
+    from pipelines.earnings_results.run_pipeline import (
+        run_earnings_results_pipeline,
+    )
+
+    rows = run_earnings_results_pipeline(tickers=tickers, limit=8)
+    return {"rows_processed": rows, "events_requested_per_ticker": 8}
 
 
 def _run_sec_metadata_stage(tickers: list[str]) -> dict:
@@ -462,6 +474,12 @@ def _stage_plan(
         plan.append((
             "market",
             lambda: _run_market_stage(tickers, market_lookback_days),
+        ))
+
+    if "earnings" in requested:
+        plan.append((
+            "earnings_results",
+            lambda: _run_earnings_results_stage(tickers),
         ))
 
     if "sec" in requested:

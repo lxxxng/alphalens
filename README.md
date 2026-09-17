@@ -81,6 +81,7 @@ Get-Content db\sql\013_watchlists.sql | docker exec -i alphalens-postgres psql -
 Get-Content db\sql\014_ingestion_runs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\015_event_alerts.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\016_automated_event_briefs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\017_earnings_results.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -155,6 +156,21 @@ docker exec -it alphalens-postgres psql -U alphalens -d alphalens -c "SELECT COU
 
 The row count should not double. The same ticker and trading date are updated by `ON CONFLICT` instead of inserted as duplicates.
 
+### Load Earnings Results
+
+Backfill announced EPS estimates, reported EPS, and surprise values for the
+same 20-company universe:
+
+```powershell
+python -m pipelines.earnings_results.run_pipeline --limit 24
+jupyter lab notebooks\05_earnings_surprises.ipynb
+```
+
+Future estimate-only calendar rows are excluded. Surprise percentages are
+stored as decimal rates, so Yahoo's `9.27` percent becomes `0.0927`. Reruns
+upsert the same ticker, announcement date, and provider instead of adding
+duplicates.
+
 ### Audit Modeling Data
 
 Before constructing targets or training a model, run the reproducible coverage
@@ -166,9 +182,8 @@ jupyter lab notebooks\01_data_audit.ipynb
 ```
 
 The audit checks OHLCV integrity, SPY alignment, filing and transcript event
-coverage, complete forward-price windows, and pinned FinBERT coverage. It also
-keeps the missing earnings-results dataset visible: earnings-surprise features
-must not be claimed or synthesized until a point-in-time source is ingested.
+coverage, announced earnings results, complete forward-price windows, and
+pinned FinBERT coverage.
 
 Construct the event-level supervised-learning targets and optionally save the
 generated rows locally:
@@ -193,11 +208,14 @@ jupyter lab notebooks\03_feature_analysis.ipynb
 ```
 
 The approved model-input allowlist contains trailing market indicators, event
-metadata, token-weighted FinBERT aggregates, management-versus-analyst tone,
-and deterministic topic-level sentiment. Market features are evaluated at the
-post-event anchor close. Tests mutate all later prices and verify that the
-anchor features do not change. Target dates, future prices, identifiers, and
-the excess-return label are never included in the feature allowlist.
+metadata, point-in-time EPS surprise metrics, token-weighted FinBERT
+aggregates, management-versus-analyst tone, and deterministic topic-level
+sentiment. Earnings results match only earnings calls within three days and
+must be observable by the post-event anchor session; SEC filing rows keep
+those fields structurally missing. Tests mutate all later prices and verify
+that the anchor features do not change. Target dates, future prices,
+identifiers, and the excess-return label are never included in the feature
+allowlist.
 
 Establish chronological model baselines before tuning a tree model:
 

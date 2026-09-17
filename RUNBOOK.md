@@ -75,6 +75,7 @@ Get-Content -Raw db\sql\013_watchlists.sql | docker exec -i alphalens-postgres p
 Get-Content -Raw db\sql\014_ingestion_runs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\015_event_alerts.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\016_automated_event_briefs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
+Get-Content -Raw db\sql\017_earnings_results.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 ```
 
 ## 6. Run all pipelines in order
@@ -138,6 +139,10 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 # Point-in-time 30-session stock, SPY, and excess-return targets
 .\.venv\Scripts\python.exe -m pipelines.ml.dataset --horizon 30 --output data\ml\event_targets_30d.csv
 .\.venv\Scripts\python.exe -m jupyter lab notebooks\02_target_construction.ipynb
+
+# Announced EPS results and surprises (apply migration 017 first)
+.\.venv\Scripts\python.exe -m pipelines.earnings_results.run_pipeline --limit 24
+.\.venv\Scripts\python.exe -m jupyter lab notebooks\05_earnings_surprises.ipynb
 
 # Point-in-time market, event, FinBERT, and topic features
 .\.venv\Scripts\python.exe -m pipelines.ml.features --horizon 30 --output data\ml\event_features_30d.csv
