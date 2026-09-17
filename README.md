@@ -199,6 +199,21 @@ post-event anchor close. Tests mutate all later prices and verify that the
 anchor features do not change. Target dates, future prices, identifiers, and
 the excess-return label are never included in the feature allowlist.
 
+Establish chronological model baselines before tuning a tree model:
+
+```powershell
+python -m pipelines.ml.baselines `
+  --output data\ml\baseline_metrics.json `
+  --predictions data\ml\baseline_test_predictions.csv
+jupyter lab notebooks\04_baseline_models.ipynb
+```
+
+The fixed validation boundary is July 2024 and the test boundary is July 2025.
+Observations whose 30-session labels cross either boundary are purged. Ridge
+regularization is selected using validation only, then refit on train plus
+validation for one final comparison against zero-excess and historical-mean
+predictions on the untouched test period.
+
 ## 5. Run the SEC Pipeline
 
 Run the SEC extractor by itself to download and display filing metadata:

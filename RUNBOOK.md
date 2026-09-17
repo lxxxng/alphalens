@@ -143,6 +143,10 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 .\.venv\Scripts\python.exe -m pipelines.ml.features --horizon 30 --output data\ml\event_features_30d.csv
 .\.venv\Scripts\python.exe -m jupyter lab notebooks\03_feature_analysis.ipynb
 
+# Purged chronological naive and Ridge baselines
+.\.venv\Scripts\python.exe -m pipelines.ml.baselines --output data\ml\baseline_metrics.json --predictions data\ml\baseline_test_predictions.csv
+.\.venv\Scripts\python.exe -m jupyter lab notebooks\04_baseline_models.ipynb
+
 # SEC narrative sentiment targets MD&A, Risk Factors, and Market Risk
 .\.venv\Scripts\python.exe -m pipelines.sec.sentiment --tickers WMT --limit 10
 

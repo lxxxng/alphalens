@@ -22,6 +22,7 @@ data/logs/
 
 # Reproducible ML datasets and model artifacts are generated locally.
 data/ml/*.csv
+data/ml/*.json
 data/ml/*.parquet
 data/ml/*.joblib
 !data/ml/.gitkeep
