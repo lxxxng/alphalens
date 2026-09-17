@@ -232,6 +232,19 @@ regularization is selected using validation only, then refit on train plus
 validation for one final comparison against zero-excess and historical-mean
 predictions on the untouched test period.
 
+Train and evaluate the regularized tree model against those locked baselines:
+
+```powershell
+python -m pipelines.ml.xgboost_model
+jupyter lab notebooks\06_xgboost_model.ipynb
+```
+
+The six-candidate grid is intentionally small for the available sample.
+Training-only models use validation early stopping; the selected parameters
+and tree count are then refit on train plus validation before exactly one test
+evaluation. Metrics, predictions, and the native XGBoost model are generated
+under `data/ml/` and remain outside version control.
+
 ## 5. Run the SEC Pipeline
 
 Run the SEC extractor by itself to download and display filing metadata:
