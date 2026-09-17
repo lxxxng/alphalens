@@ -25,6 +25,7 @@ data/ml/*.csv
 data/ml/*.json
 data/ml/*.parquet
 data/ml/*.joblib
+data/ml/registry/
 !data/ml/.gitkeep
 
 # Downloaded SEC filings

@@ -273,6 +273,22 @@ compares importance stability across earnings calls, SEC filings, and test
 halves, and reports errors by source and ticker. SHAP describes how the model
 used its inputs; it does not establish that a feature caused future returns.
 
+Package the complete experiment in the local model registry:
+
+```powershell
+python -m pipelines.ml.registry
+jupyter lab notebooks\09_model_registry.ipynb
+```
+
+Each immutable version contains the native XGBoost model, metrics, ordered
+feature schema, dataset fingerprints, model card, reference features, expected
+predictions, and SHA-256 checksums. Registration verifies the temporary bundle
+before publishing it atomically. Loading verifies checksums and replays the
+reference predictions. A model becomes `champion` only when it beats the
+historical-mean test MAE and has positive net long-short Sharpe; rejected
+models remain reproducible but cannot be loaded for deployment without an
+explicit research-only override.
+
 ## 5. Run the SEC Pipeline
 
 Run the SEC extractor by itself to download and display filing metadata:
