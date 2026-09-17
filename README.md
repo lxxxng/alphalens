@@ -245,6 +245,21 @@ and tree count are then refit on train plus validation before exactly one test
 evaluation. Metrics, predictions, and the native XGBoost model are generated
 under `data/ml/` and remain outside version control.
 
+Backtest the untouched test predictions as daily event-driven portfolios:
+
+```powershell
+python -m pipelines.ml.backtest
+jupyter lab notebooks\07_strategy_backtest.ipynb
+```
+
+Each prediction becomes tradable at its feature-session close and expires at
+its 30-session target date. The backtest keeps the latest active signal per
+ticker, forms equal-weight top/bottom and long-only portfolios, applies 10 bps
+of one-way turnover costs, and reports gross and net return, volatility,
+Sharpe ratio, drawdown, turnover, and SPY buy-and-hold. These assumptions are
+fixed before reading test performance; test results must not tune the model or
+portfolio rules.
+
 ## 5. Run the SEC Pipeline
 
 Run the SEC extractor by itself to download and display filing metadata:

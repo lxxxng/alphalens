@@ -156,6 +156,10 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 .\.venv\Scripts\python.exe -m pipelines.ml.xgboost_model
 .\.venv\Scripts\python.exe -m jupyter lab notebooks\06_xgboost_model.ipynb
 
+# Event-driven portfolio backtest with turnover and transaction costs
+.\.venv\Scripts\python.exe -m pipelines.ml.backtest
+.\.venv\Scripts\python.exe -m jupyter lab notebooks\07_strategy_backtest.ipynb
+
 # SEC narrative sentiment targets MD&A, Risk Factors, and Market Risk
 .\.venv\Scripts\python.exe -m pipelines.sec.sentiment --tickers WMT --limit 10
 

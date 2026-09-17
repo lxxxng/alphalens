@@ -84,6 +84,10 @@ class XGBoostModelTests(unittest.TestCase):
             "xgboost_selected_01",
             experiment.test_metrics["model"].tolist(),
         )
+        self.assertIn(
+            "target_trading_date",
+            experiment.test_predictions.columns,
+        )
         self.assertEqual(payload["feature_count"], len(
             model_feature_columns(include_topics=False)
         ))

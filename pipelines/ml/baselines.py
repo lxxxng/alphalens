@@ -240,6 +240,7 @@ def _prediction_frame(
         "event_source",
         "event_date",
         "feature_as_of_date",
+        "target_trading_date",
         TARGET_COLUMN,
     ]].copy()
     result["model"] = model_name
