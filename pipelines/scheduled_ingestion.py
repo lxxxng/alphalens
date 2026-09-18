@@ -156,6 +156,31 @@ def _update_run(engine, table: Table, run_id: int, **values) -> None:
         )
 
 
+def _mark_orphaned_runs(engine, table: Table) -> int:
+    """Close RUNNING rows after acquiring the otherwise-free scheduler lock."""
+
+    now = datetime.now(timezone.utc)
+    statement = (
+        update(table)
+        .where(table.c.status == "RUNNING")
+        .values(
+            status="FAILED",
+            current_stage=None,
+            error=(
+                "The ingestion process exited before recording a terminal "
+                "status. The next run recovered this orphaned record."
+            ),
+            completed_at=now,
+            updated_at=now,
+        )
+    )
+
+    with engine.begin() as connection:
+        result = connection.execute(statement)
+
+    return int(result.rowcount or 0)
+
+
 def _json_result(value):
     """Keep stage results compact and JSON-safe for PostgreSQL JSONB."""
 
@@ -617,6 +642,14 @@ def run_scheduled_ingestion(
         )
         return {"run_id": run_id, "status": "SKIPPED", "tickers": selected_tickers}
 
+    orphaned_runs = _mark_orphaned_runs(engine, table)
+
+    if orphaned_runs:
+        print(
+            f"Recovered {orphaned_runs} interrupted ingestion run(s).",
+            flush=True,
+        )
+
     run_started_at = datetime.now(timezone.utc)
     run_id = _create_run(
         engine,
@@ -728,6 +761,19 @@ def run_scheduled_ingestion(
             "tickers": selected_tickers,
             "stage_results": results,
         }
+    except BaseException as error:
+        _update_run(
+            engine,
+            table,
+            run_id,
+            status="FAILED",
+            current_stage=None,
+            error=(
+                f"Run interrupted by {type(error).__name__}: {error}"
+            )[:2000],
+            completed_at=datetime.now(timezone.utc),
+        )
+        raise
     finally:
         lock_connection.execute(
             text("SELECT pg_advisory_unlock(:lock_id)"),

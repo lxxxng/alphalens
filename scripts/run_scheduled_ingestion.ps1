@@ -25,6 +25,7 @@ $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $logPath = Join-Path $logDirectory "ingestion-$timestamp.log"
 
 Push-Location $repoRoot
+$exitCode = $null
 
 try {
     Write-Output "AlphaLens scheduled ingestion started: $(Get-Date -Format o)"
@@ -32,14 +33,26 @@ try {
     Write-Output "Automatic brief limit: $MaxAutoBriefs"
     Write-Output "Log: $logPath"
 
-    & $PythonPath `
-        -m pipelines.scheduled_ingestion `
-        --scope $Scope `
-        --max-auto-briefs $MaxAutoBriefs `
-        --trigger-type scheduled 2>&1 |
-        Tee-Object -FilePath $logPath
+    # Windows PowerShell wraps native stderr as ErrorRecord objects. Python
+    # libraries commonly use stderr for progress and warnings, so keep those
+    # messages visible and let the process exit code decide success or failure.
+    $originalErrorActionPreference = $ErrorActionPreference
 
-    $exitCode = $LASTEXITCODE
+    try {
+        $ErrorActionPreference = "Continue"
+
+        & $PythonPath `
+            -m pipelines.scheduled_ingestion `
+            --scope $Scope `
+            --max-auto-briefs $MaxAutoBriefs `
+            --trigger-type scheduled 2>&1 |
+            ForEach-Object { $_.ToString() } |
+            Tee-Object -FilePath $logPath
+
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $originalErrorActionPreference
+    }
 } finally {
     Pop-Location
 }

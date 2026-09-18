@@ -31,6 +31,10 @@ const formTypeSelect = document.querySelector("#form-type");
 const sectionKeySelect = document.querySelector("#section-key");
 const openAIHealthButton = document.querySelector("#openai-health");
 const openAIHealthLabel = document.querySelector("#openai-health-label");
+const dataFreshnessBanner = document.querySelector("#data-freshness-banner");
+const dataFreshnessTitle = document.querySelector("#data-freshness-title");
+const dataFreshnessMessage = document.querySelector("#data-freshness-message");
+const dataFreshnessMeta = document.querySelector("#data-freshness-meta");
 const priceChart = document.querySelector("#price-chart");
 const priceChartSvg = document.querySelector("#price-chart-svg");
 const chartTooltip = document.querySelector("#chart-tooltip");
@@ -450,6 +454,46 @@ async function loadProspectiveStatus() {
       message: error.message,
       model: null,
     });
+  }
+}
+
+function renderDataFreshness(data, error = null) {
+  if (!error && data.ready) {
+    dataFreshnessBanner.hidden = true;
+    syncHeaderHeight();
+    return;
+  }
+
+  const issues = data?.issues || [];
+  const latestMarketDate = data?.market?.latest_trading_date;
+  const scheduler = data?.scheduler?.latest_run;
+  dataFreshnessBanner.className = `data-freshness-banner ${error ? "error" : "stale"}`;
+  dataFreshnessTitle.textContent = error
+    ? "Freshness check unavailable"
+    : "Data refresh required";
+  dataFreshnessMessage.textContent = error
+    ? error.message
+    : issues.map((item) => item.message).join(" ");
+  dataFreshnessMeta.textContent = [
+    latestMarketDate ? `Market through ${formatChartDate(latestMarketDate)}` : "No market date",
+    scheduler ? `Scheduler run ${scheduler.run_id}: ${scheduler.status}` : "No scheduler run",
+  ].join(" | ");
+  dataFreshnessBanner.hidden = false;
+  syncHeaderHeight();
+}
+
+async function loadDataFreshness() {
+  try {
+    const response = await fetch("/api/system/data-freshness");
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not read data freshness.");
+    }
+
+    renderDataFreshness(data);
+  } catch (error) {
+    renderDataFreshness(null, error);
   }
 }
 
@@ -3826,8 +3870,10 @@ loadWatchlists();
 loadAlerts();
 loadModelStatus();
 loadProspectiveStatus();
+loadDataFreshness();
 window.setInterval(loadAlerts, 60_000);
 window.setInterval(loadProspectiveStatus, 300_000);
+window.setInterval(loadDataFreshness, 300_000);
 
 if (initialAlertsOpen) {
   toggleAlerts();

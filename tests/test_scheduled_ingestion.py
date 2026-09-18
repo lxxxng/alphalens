@@ -1,11 +1,14 @@
 """Tests for scheduled ingestion scope and stage orchestration."""
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
+
+from sqlalchemy import Column, Integer, MetaData, String, Table
 
 from pipelines.market_data.extractor import extract_market_data
 from pipelines.scheduled_ingestion import (
     DEFAULT_STAGES,
+    _mark_orphaned_runs,
     _run_model_monitor_stage,
     _stage_plan,
     normalize_tickers,
@@ -15,6 +18,28 @@ from pipelines.scheduled_ingestion import (
 
 
 class ScheduledIngestionTests(unittest.TestCase):
+    def test_orphaned_running_runs_are_closed_before_a_new_run(self):
+        table = Table(
+            "ingestion_runs",
+            MetaData(),
+            Column("run_id", Integer),
+            Column("status", String),
+            Column("current_stage", String),
+            Column("error", String),
+            Column("completed_at", String),
+            Column("updated_at", String),
+        )
+        engine = MagicMock()
+        connection = engine.begin.return_value.__enter__.return_value
+        connection.execute.return_value.rowcount = 2
+
+        recovered = _mark_orphaned_runs(engine, table)
+
+        self.assertEqual(recovered, 2)
+        statement = connection.execute.call_args.args[0]
+        self.assertIn("UPDATE ingestion_runs", str(statement))
+        self.assertIn("ingestion_runs.status", str(statement))
+
     @patch("pipelines.market_data.extractor.yf.download")
     def test_market_refresh_scopes_companies_and_keeps_spy(self, download):
         download.return_value = Mock()

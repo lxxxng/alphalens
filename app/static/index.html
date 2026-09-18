@@ -7,7 +7,7 @@
     <script src="/static/theme.js?v=20260911.2"></script>
     <!-- Version static assets so a long-running local browser cannot combine
          new markup with a stale stylesheet or script. -->
-    <link rel="stylesheet" href="/static/styles.css?v=20260917.1">
+    <link rel="stylesheet" href="/static/styles.css?v=20260918.1">
     <link rel="stylesheet" href="/static/navigation.css?v=20260916.1">
   </head>
   <body>
@@ -50,6 +50,15 @@
             <span id="openai-health-label">OpenAI: Checking</span>
           </button>
         </nav>
+      </div>
+      <div id="data-freshness-banner" class="data-freshness-banner" role="status" aria-live="polite" hidden>
+        <span class="data-freshness-indicator" aria-hidden="true"></span>
+        <div class="data-freshness-copy">
+          <strong id="data-freshness-title">Data refresh required</strong>
+          <span id="data-freshness-message"></span>
+          <small id="data-freshness-meta"></small>
+        </div>
+        <a href="/api/system/data-freshness" target="_blank" rel="noreferrer">Details</a>
       </div>
     </header>
 
@@ -533,6 +542,6 @@
     </dialog>
 
     <script src="/static/formatters.js?v=20260910.1"></script>
-    <script src="/static/app.js?v=20260917.1"></script>
+    <script src="/static/app.js?v=20260918.1"></script>
   </body>
 </html>

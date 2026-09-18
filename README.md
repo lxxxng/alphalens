@@ -410,6 +410,26 @@ recent-prediction audit. Stored feature snapshots remain private to PostgreSQL.
 docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT model_version, status, COUNT(*) FROM prospective_predictions GROUP BY model_version, status ORDER BY model_version, status;"
 ```
 
+Inspect production data freshness independently of model status:
+
+```text
+GET /api/system/data-freshness
+```
+
+The check covers watched-company and SPY market dates, the latest scheduler
+run, the latest successful run, and activity timestamps for SEC filings,
+earnings transcripts, sentiment, and prospective predictions. Market prices
+older than five calendar days or no successful ingestion within 72 hours are
+critical by default. Override those non-secret thresholds with
+`ALPHALENS_MARKET_MAX_AGE_DAYS` and
+`ALPHALENS_SCHEDULER_MAX_AGE_HOURS` when deployment requirements differ.
+Quiet filing or earnings periods are shown but do not fail readiness.
+
+Critical freshness failures appear in a global frontend warning and make
+`GET /ready` return HTTP 503. `GET /health` remains a process-only liveness
+probe, so diagnostics and the research interface remain reachable while data
+is repaired.
+
 ## 5. Run the SEC Pipeline
 
 Run the SEC extractor by itself to download and display filing metadata:

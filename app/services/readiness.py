@@ -8,6 +8,8 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, text
 
+from app.services.data_freshness import get_data_freshness
+
 
 REQUIRED_FAISS_FILES = (
     "sec_chunks.faiss",
@@ -22,6 +24,11 @@ REQUIRED_DATABASE_TABLES = (
     "earnings_transcript_chunks",
     "event_briefs",
     "event_alerts",
+    "watchlist_items",
+    "ingestion_runs",
+    "earnings_transcript_turn_sentiment",
+    "filing_chunk_sentiment",
+    "prospective_predictions",
 )
 
 
@@ -68,6 +75,16 @@ def check_readiness() -> dict:
                 "ready": not missing_tables,
                 "missing_tables": missing_tables,
             }
+
+            if not missing_tables:
+                freshness = get_data_freshness(engine)
+                checks["data_freshness"] = {
+                    "ready": freshness["ready"],
+                    "status": freshness["status"],
+                    "market": freshness["market"],
+                    "scheduler": freshness["scheduler"],
+                    "issues": freshness["issues"],
+                }
         except Exception as error:
             checks["database"] = {
                 "ready": False,

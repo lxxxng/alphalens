@@ -156,6 +156,10 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 # Read-only prospective monitor used by the frontend
 Invoke-RestMethod http://127.0.0.1:8000/api/models/prospective/status
 
+# Market, scheduler, corpus, sentiment, and model-monitor freshness
+Invoke-RestMethod http://127.0.0.1:8000/api/system/data-freshness
+Invoke-RestMethod http://127.0.0.1:8000/ready
+
 # Purged chronological naive and Ridge baselines
 .\.venv\Scripts\python.exe -m pipelines.ml.baselines --output data\ml\baseline_metrics.json --predictions data\ml\baseline_test_predictions.csv
 .\.venv\Scripts\python.exe -m jupyter lab notebooks\04_baseline_models.ipynb

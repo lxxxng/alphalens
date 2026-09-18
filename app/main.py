@@ -46,6 +46,9 @@ from app.api.alerts import (
 from app.api.models import (
     router as models_router,
 )
+from app.api.system import (
+    router as system_router,
+)
 from app.services.readiness import check_readiness
 
 
@@ -104,6 +107,10 @@ app.include_router(
 
 app.include_router(
     models_router
+)
+
+app.include_router(
+    system_router
 )
 
 
