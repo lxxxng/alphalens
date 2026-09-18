@@ -30,6 +30,7 @@ DEFAULT_STAGES = (
     "transcripts",
     "embeddings",
     "sentiment",
+    "model_monitor",
     "briefs",
 )
 
@@ -423,6 +424,29 @@ def _run_sentiment_stage(tickers: list[str]) -> dict:
     return {"sec": sec, "transcripts": transcripts}
 
 
+def _run_model_monitor_stage(tickers: list[str]) -> dict:
+    """Record pre-outcome forecasts and mature older shadow predictions."""
+
+    from pipelines.ml.prospective import run_prospective_monitor
+
+    try:
+        report = run_prospective_monitor(tickers=tickers)
+    except FileNotFoundError as error:
+        return {
+            "status": "SKIPPED",
+            "reason": str(error),
+        }
+
+    evaluation = report["evaluation"]
+    return {
+        "status": evaluation["status"],
+        "model_version": evaluation["model_version"],
+        "counts": evaluation["counts"],
+        "scoring": report["scoring"],
+        "maturation": report["maturation"],
+    }
+
+
 def _run_event_alert_stage(
     tickers: list[str],
     *,
@@ -517,6 +541,12 @@ def _stage_plan(
 
     if "sentiment" in requested:
         plan.append(("sentiment", lambda: _run_sentiment_stage(tickers)))
+
+    if "model_monitor" in requested:
+        plan.append((
+            "model_monitor",
+            lambda: _run_model_monitor_stage(tickers),
+        ))
 
     if "briefs" in requested:
         plan.append((
@@ -628,7 +658,7 @@ def run_scheduled_ingestion(
             _update_run(engine, table, run_id, current_stage=stage_name)
 
             if (
-                stage_name == "automated_briefs"
+                stage_name in {"model_monitor", "automated_briefs"}
                 and any(item["status"] == "FAILED" for item in results)
             ):
                 blockers = [

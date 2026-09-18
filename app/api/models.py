@@ -10,6 +10,7 @@ from app.services.model_inference import (
     normalize_prediction_tickers,
     predict_latest_events,
 )
+from app.services.prospective_monitor import get_prospective_model_status
 
 
 router = APIRouter(prefix="/api/models", tags=["Models"])
@@ -35,6 +36,16 @@ def model_status():
     """Return registry and production-serving readiness."""
 
     return get_model_status()
+
+
+@router.get("/prospective/status")
+def prospective_model_status():
+    """Return read-only progress for the frozen future holdout."""
+
+    try:
+        return get_prospective_model_status()
+    except (ImportError, RuntimeError, ValueError, OSError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 @router.post("/predict")

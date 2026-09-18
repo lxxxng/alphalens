@@ -86,6 +86,16 @@ const modelEventSource = document.querySelector("#model-event-source");
 const modelPreviewButton = document.querySelector("#model-preview");
 const modelMessage = document.querySelector("#model-message");
 const modelPredictions = document.querySelector("#model-predictions");
+const prospectiveVersion = document.querySelector("#prospective-version");
+const prospectiveStatus = document.querySelector("#prospective-status");
+const prospectiveProgress = document.querySelector("#prospective-progress");
+const prospectiveProgressLabel = document.querySelector("#prospective-progress-label");
+const prospectiveProgressTrack = document.querySelector("#prospective-progress-track");
+const prospectiveProgressFill = document.querySelector("#prospective-progress-fill");
+const prospectiveMetrics = document.querySelector("#prospective-metrics");
+const prospectiveChecks = document.querySelector("#prospective-checks");
+const prospectiveMessage = document.querySelector("#prospective-message");
+const prospectiveRecent = document.querySelector("#prospective-recent");
 const researchOutput = document.querySelector(".research-output");
 const historyList = document.querySelector("#history-list");
 const historyRefreshButton = document.querySelector("#history-refresh");
@@ -316,6 +326,129 @@ async function loadModelStatus() {
       message: error.message,
       latest_model: null,
       inference_runtime_available: false,
+    });
+  }
+}
+
+function setProspectiveStatus(label, state = "") {
+  prospectiveStatus.textContent = label;
+  prospectiveStatus.className = `model-status ${state}`.trim();
+}
+
+function prospectiveCheck(label, value) {
+  const row = document.createElement("div");
+  const marker = document.createElement("span");
+  const text = document.createElement("strong");
+  const state = value === true ? "passed" : value === false ? "failed" : "waiting";
+  row.className = `prospective-check ${state}`;
+  marker.setAttribute("aria-hidden", "true");
+  text.textContent = label;
+  row.append(marker, text);
+  return row;
+}
+
+function renderProspectiveStatus(data) {
+  prospectiveMetrics.replaceChildren();
+  prospectiveChecks.replaceChildren();
+  prospectiveRecent.replaceChildren();
+
+  if (!data.available || !data.model) {
+    prospectiveVersion.textContent = "No frozen shadow model available";
+    setProspectiveStatus("Unavailable", "error");
+    prospectiveProgress.hidden = true;
+    prospectiveMetrics.hidden = true;
+    prospectiveChecks.hidden = true;
+    prospectiveMessage.textContent = data.message || "Prospective monitoring is unavailable.";
+    return;
+  }
+
+  const model = data.model;
+  const progress = data.progress || {};
+  const counts = data.counts || {};
+  const matured = Number(progress.matured || 0);
+  const required = Number(progress.required || 40);
+  const ratio = Math.max(0, Math.min(Number(progress.ratio || 0), 1));
+  const forecast = data.forecast_metrics || {};
+  const baseline = data.baseline_metrics || {};
+  const strategy = data.net_strategy || {};
+  const reviewReady = data.status === "eligible_for_review";
+  prospectiveVersion.textContent = `${model.family.toUpperCase()} | ${model.version} | cutoff ${model.training_cutoff}`;
+  setProspectiveStatus(
+    reviewReady ? "Review Ready" : "Collecting",
+    reviewReady ? "ready" : "blocked"
+  );
+  prospectiveProgressLabel.textContent = [
+    `${matured} / ${required} matured`,
+    `${Number(counts.pending || 0)} pending`,
+    `${Number(counts.invalid || 0)} excluded`,
+  ].join(" | ");
+  prospectiveProgressTrack.setAttribute("aria-valuemax", String(required));
+  prospectiveProgressTrack.setAttribute("aria-valuenow", String(matured));
+  prospectiveProgressFill.style.width = `${ratio * 100}%`;
+  prospectiveProgress.hidden = false;
+  prospectiveMetrics.append(
+    modelMetric("Model MAE", Number.isFinite(forecast.mae) ? forecast.mae.toFixed(4) : "--"),
+    modelMetric("Frozen Mean MAE", Number.isFinite(baseline.mae) ? baseline.mae.toFixed(4) : "--"),
+    modelMetric("Spearman IC", Number.isFinite(forecast.spearman_ic) ? forecast.spearman_ic.toFixed(3) : "--"),
+    modelMetric("Net L/S Sharpe", Number.isFinite(strategy.sharpe) ? strategy.sharpe.toFixed(2) : "--")
+  );
+  prospectiveMetrics.hidden = false;
+
+  const checks = data.checks || {};
+  prospectiveChecks.append(
+    prospectiveCheck("Minimum future sample", checks.minimum_events),
+    prospectiveCheck("MAE beats frozen mean", checks.mae_beats_frozen_mean),
+    prospectiveCheck("Positive rank IC", checks.positive_spearman_ic),
+    prospectiveCheck("Positive net L/S Sharpe", checks.positive_net_long_short_sharpe)
+  );
+  prospectiveChecks.hidden = false;
+  prospectiveMessage.textContent = data.message;
+
+  for (const item of data.recent_predictions || []) {
+    const row = document.createElement("article");
+    const identity = document.createElement("div");
+    const ticker = document.createElement("strong");
+    const event = document.createElement("span");
+    const values = document.createElement("div");
+    const prediction = document.createElement("strong");
+    const outcome = document.createElement("span");
+    const state = document.createElement("span");
+    const metadata = document.createElement("small");
+    row.className = "prospective-row";
+    ticker.textContent = item.ticker;
+    event.textContent = item.event_source === "earnings_call" ? "Earnings" : "SEC filing";
+    prediction.textContent = formatReturn(item.predicted_excess_return, 2);
+    prediction.className = item.predicted_excess_return >= 0 ? "positive" : "negative";
+    outcome.textContent = Number.isFinite(item.realized_excess_return)
+      ? `Realized ${formatReturn(item.realized_excess_return, 2)}`
+      : item.status === "INVALID" ? "Excluded from evidence" : "Outcome pending";
+    state.className = `prospective-row-status ${String(item.status).toLowerCase()}`;
+    state.textContent = item.status;
+    metadata.textContent = item.outcome_error
+      ? item.outcome_error.replaceAll("_", " ")
+      : `Feature date ${formatChartDate(String(item.feature_as_of_date).slice(0, 10))}`;
+    identity.append(ticker, event);
+    values.append(prediction, outcome);
+    row.append(identity, values, state, metadata);
+    prospectiveRecent.appendChild(row);
+  }
+}
+
+async function loadProspectiveStatus() {
+  try {
+    const response = await fetch("/api/models/prospective/status");
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not read prospective model status.");
+    }
+
+    renderProspectiveStatus(data);
+  } catch (error) {
+    renderProspectiveStatus({
+      available: false,
+      message: error.message,
+      model: null,
     });
   }
 }
@@ -3692,7 +3825,9 @@ loadEventBriefHistory();
 loadWatchlists();
 loadAlerts();
 loadModelStatus();
+loadProspectiveStatus();
 window.setInterval(loadAlerts, 60_000);
+window.setInterval(loadProspectiveStatus, 300_000);
 
 if (initialAlertsOpen) {
   toggleAlerts();

@@ -421,6 +421,37 @@
             Reading the registered model and promotion checks...
           </p>
           <div id="model-predictions" class="model-predictions" aria-live="polite"></div>
+          <section class="prospective-monitor" aria-labelledby="prospective-title">
+            <div class="prospective-header">
+              <div>
+                <p class="eyebrow">Future Holdout</p>
+                <h3 id="prospective-title">Prospective Evaluation</h3>
+                <p id="prospective-version" class="model-version">Checking shadow model...</p>
+              </div>
+              <span id="prospective-status" class="model-status checking">Checking</span>
+            </div>
+            <div id="prospective-progress" class="prospective-progress" hidden>
+              <div>
+                <span>Review sample</span>
+                <strong id="prospective-progress-label">0 / 40 outcomes</strong>
+              </div>
+              <div
+                id="prospective-progress-track"
+                class="prospective-progress-track"
+                role="progressbar"
+                aria-label="Matured prospective outcomes"
+                aria-valuemin="0"
+                aria-valuemax="40"
+                aria-valuenow="0"
+              ><span id="prospective-progress-fill"></span></div>
+            </div>
+            <div id="prospective-metrics" class="model-metrics prospective-metrics" hidden></div>
+            <div id="prospective-checks" class="prospective-checks" hidden></div>
+            <p id="prospective-message" class="model-message" aria-live="polite">
+              Reading the immutable prediction ledger...
+            </p>
+            <div id="prospective-recent" class="prospective-recent" aria-live="polite"></div>
+          </section>
         </section>
           </section>
 

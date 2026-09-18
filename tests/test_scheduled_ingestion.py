@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 from pipelines.market_data.extractor import extract_market_data
 from pipelines.scheduled_ingestion import (
     DEFAULT_STAGES,
+    _run_model_monitor_stage,
     _stage_plan,
     normalize_tickers,
     resolve_tickers,
@@ -72,9 +73,21 @@ class ScheduledIngestionTests(unittest.TestCase):
                 "event_alerts",
                 "embeddings",
                 "sentiment",
+                "model_monitor",
                 "automated_briefs",
             ],
         )
+
+    @patch(
+        "pipelines.ml.prospective.run_prospective_monitor",
+        side_effect=FileNotFoundError("freeze the model first"),
+    )
+    def test_model_monitor_skips_cleanly_before_one_time_freeze(self, run_monitor):
+        result = _run_model_monitor_stage(["WMT"])
+
+        self.assertEqual(result["status"], "SKIPPED")
+        self.assertIn("freeze", result["reason"])
+        run_monitor.assert_called_once_with(tickers=["WMT"])
 
     @patch("pipelines.scheduled_ingestion.resolve_tickers")
     @patch("pipelines.scheduled_ingestion.get_database_engine")

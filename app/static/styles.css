@@ -1738,6 +1738,163 @@ select:focus {
 
 .model-prediction.skipped { border-style: dashed; }
 
+.prospective-monitor {
+  margin-top: 26px;
+  border-top: 1px solid var(--line-strong);
+  padding-top: 25px;
+}
+
+.prospective-header,
+.prospective-progress > div:first-child,
+.prospective-row > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.prospective-header h3 {
+  margin: 3px 0 0;
+  font-size: 16px;
+}
+
+.prospective-progress > div:first-child { flex-wrap: wrap; }
+
+.prospective-progress {
+  margin-top: 17px;
+}
+
+.prospective-progress span,
+.prospective-progress strong {
+  font-size: 10px;
+}
+
+.prospective-progress span {
+  color: var(--muted);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.prospective-progress strong {
+  font-family: Consolas, "Liberation Mono", monospace;
+}
+
+.prospective-progress-track {
+  height: 7px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.prospective-progress-track > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--green);
+  transition: width 220ms ease;
+}
+
+.prospective-metrics { margin-top: 17px; }
+
+.prospective-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.prospective-checks[hidden] { display: none; }
+
+.prospective-check {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding: 10px 13px;
+}
+
+.prospective-check:nth-child(even) { border-left: 1px solid var(--line); }
+
+.prospective-check > span {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.prospective-check.passed > span { background: var(--green); }
+.prospective-check.failed > span { background: var(--red); }
+.prospective-check.waiting > span { background: var(--amber); }
+
+.prospective-check strong {
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+
+.prospective-recent {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.prospective-recent:empty { display: none; }
+
+.prospective-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(170px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+  padding: 11px 2px;
+}
+
+.prospective-row > div {
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.prospective-row > div span,
+.prospective-row small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.prospective-row > div:first-child span {
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.prospective-row > div:nth-child(2) strong {
+  min-width: 58px;
+  font-family: Consolas, "Liberation Mono", monospace;
+}
+
+.prospective-row-status {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  padding: 4px 7px;
+  font-size: 8px;
+  font-weight: 850;
+}
+
+.prospective-row-status.matured {
+  border-color: #87c9b2;
+  color: var(--green-deep);
+}
+
+.prospective-row-status.invalid {
+  border-color: #e0aaa6;
+  color: var(--red);
+}
+
+.prospective-row small {
+  grid-column: 1 / -1;
+  margin-top: -7px;
+  overflow-wrap: anywhere;
+}
+
 .signal-header,
 .topic-heading {
   display: flex;
@@ -3262,6 +3419,12 @@ html[data-theme="dark"] .chart-tooltip {
   .model-metrics > div:nth-child(3) { border-left: 0; }
   .model-metrics > div:nth-child(n + 3) { border-top: 1px solid var(--line); }
   .model-predictions { grid-template-columns: minmax(0, 1fr); }
+
+  .prospective-header { align-items: flex-start; }
+  .prospective-checks { grid-template-columns: minmax(0, 1fr); }
+  .prospective-check:nth-child(even) { border-left: 0; }
+  .prospective-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .prospective-row > div:nth-child(2) { grid-column: 1 / -1; }
 
   .brief-sections { grid-template-columns: minmax(0, 1fr); }
 

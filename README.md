@@ -89,6 +89,7 @@ Get-Content db\sql\014_ingestion_runs.sql | docker exec -i alphalens-postgres ps
 Get-Content db\sql\015_event_alerts.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\016_automated_event_briefs.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 Get-Content db\sql\017_earnings_results.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
+Get-Content db\sql\018_prospective_predictions.sql | docker exec -i alphalens-postgres psql -U alphalens -d alphalens
 ```
 
 Verify the tables:
@@ -370,6 +371,44 @@ event hit rate, daily returns, and position weights are written under
 `data/ml/`. This remains a research-only diagnostic: the 10-session horizon
 was selected after inspecting the same historical folds and still requires a
 genuinely future holdout.
+
+Freeze the chosen model once, then begin prospective shadow evaluation:
+
+```powershell
+python -m pipelines.ml.prospective freeze
+python -m pipelines.ml.prospective run
+```
+
+The freeze command fits the selected 10-session Elastic Net using only labels
+fully observable by its recorded cutoff. It publishes an immutable,
+checksum-verified JSON artifact containing the feature order, preprocessing
+state, coefficients, training fingerprint, and replay examples. The run
+command records only events whose 10-session outcome is still unavailable,
+including the exact feature snapshot and contemporaneous historical-mean
+forecast. Later runs attach realized stock, SPY, and excess returns without
+rewriting the original prediction.
+
+Migration `018_prospective_predictions.sql` creates the authoritative ledger.
+After a model is frozen, scheduled ingestion runs the monitor after FinBERT
+sentiment so new event features are complete. Evaluation remains `collecting`
+until at least 40 outcomes mature, then checks MAE against the frozen mean,
+Spearman IC, and net long-short Sharpe. Passing permits manual review only;
+the monitor never promotes a model automatically.
+
+The Return Model Monitor reads the same evidence through a read-only endpoint
+and refreshes it every five minutes:
+
+```text
+GET /api/models/prospective/status
+```
+
+The response includes the verified artifact version, training cutoff,
+collection progress, forecast and strategy metrics, gate states, and a bounded
+recent-prediction audit. Stored feature snapshots remain private to PostgreSQL.
+
+```powershell
+docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "SELECT model_version, status, COUNT(*) FROM prospective_predictions GROUP BY model_version, status ORDER BY model_version, status;"
+```
 
 ## 5. Run the SEC Pipeline
 
@@ -1019,10 +1058,12 @@ ticker does not create duplicates.
 The incremental scheduler uses the union of all watchlist members by default.
 It refreshes recent OHLCV data, SEC metadata and documents, earnings calls,
 missing chunks, embeddings, and pending FinBERT sentiment. It then generates
-quality-gated briefs for queued filing and earnings alerts. PostgreSQL advisory
-locking prevents overlapping runs, while `ingestion_runs` stores each stage's
-duration, result, and error. Existing chunk IDs are never rebuilt during a
-scheduled run, so their FAISS mappings remain stable.
+new prospective model predictions, matures older predictions, and generates
+quality-gated briefs for queued filing and earnings alerts. PostgreSQL
+advisory locking prevents overlapping runs, while `ingestion_runs` stores each
+stage's duration, result, and error. Existing chunk IDs are never rebuilt
+during a scheduled run, so their FAISS mappings remain stable. Before the
+one-time model freeze, the model-monitor stage reports a clean skip.
 
 Preview the resolved ticker scope without calling external providers:
 

@@ -76,6 +76,7 @@ Get-Content -Raw db\sql\014_ingestion_runs.sql | docker exec -i alphalens-postgr
 Get-Content -Raw db\sql\015_event_alerts.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\016_automated_event_briefs.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 Get-Content -Raw db\sql\017_earnings_results.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
+Get-Content -Raw db\sql\018_prospective_predictions.sql | docker exec -i alphalens-postgres psql -v ON_ERROR_STOP=1 -U alphalens -d alphalens
 ```
 
 ## 6. Run all pipelines in order
@@ -147,6 +148,13 @@ docker exec alphalens-postgres psql -U alphalens -d alphalens -P pager=off -c "S
 # Point-in-time market, event, FinBERT, and topic features
 .\.venv\Scripts\python.exe -m pipelines.ml.features --horizon 30 --output data\ml\event_features_30d.csv
 .\.venv\Scripts\python.exe -m jupyter lab notebooks\03_feature_analysis.ipynb
+
+# Freeze once, then record/mature genuinely prospective 10-session forecasts
+.\.venv\Scripts\python.exe -m pipelines.ml.prospective freeze
+.\.venv\Scripts\python.exe -m pipelines.ml.prospective run
+
+# Read-only prospective monitor used by the frontend
+Invoke-RestMethod http://127.0.0.1:8000/api/models/prospective/status
 
 # Purged chronological naive and Ridge baselines
 .\.venv\Scripts\python.exe -m pipelines.ml.baselines --output data\ml\baseline_metrics.json --predictions data\ml\baseline_test_predictions.csv
