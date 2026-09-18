@@ -232,12 +232,16 @@ def synchronize_database_status(
             )
 
 
-def validate_index_ids(
+def reconcile_index_ids(
     database_chunks,
+    index,
     existing_ids: set[int],
 ):
     """
-    Fail if FAISS references chunk IDs that no longer exist in PostgreSQL.
+    Prune vectors whose transcript chunks no longer exist in PostgreSQL.
+
+    IndexIDMap2 can remove exact PostgreSQL IDs, so valid embeddings remain
+    reusable and only genuinely new transcript chunks require API calls.
     """
 
     database_ids = {
@@ -247,12 +251,41 @@ def validate_index_ids(
 
     stale_ids = existing_ids - database_ids
 
-    if stale_ids:
+    if not stale_ids:
+        return existing_ids, 0
+
+    if index is None:
         raise RuntimeError(
-            f"Transcript FAISS contains {len(stale_ids)} chunk IDs that "
-            "no longer exist in PostgreSQL. Delete "
-            f"{INDEX_PATH} and {METADATA_PATH}, then rebuild."
+            "Transcript FAISS IDs were supplied without an index."
         )
+
+    stale_id_array = np.array(
+        sorted(stale_ids),
+        dtype="int64",
+    )
+    removed = int(
+        index.remove_ids(
+            stale_id_array
+        )
+    )
+
+    if removed != len(stale_ids):
+        raise RuntimeError(
+            "FAISS did not remove every stale transcript chunk ID. "
+            f"Expected {len(stale_ids)}, removed {removed}."
+        )
+
+    remaining_ids = get_existing_faiss_ids(
+        index
+    )
+
+    if remaining_ids - database_ids:
+        raise RuntimeError(
+            "FAISS still contains transcript chunk IDs that are absent "
+            "from PostgreSQL after reconciliation."
+        )
+
+    return remaining_ids, removed
 
 
 def get_chunks_to_embed(
@@ -524,10 +557,23 @@ def run_embedding_pipeline():
     index = load_existing_index()
     existing_ids = get_existing_faiss_ids(index)
 
-    validate_index_ids(
+    # Keep valid vectors when transcript retention removes source chunks.
+    existing_ids, removed_ids = reconcile_index_ids(
         database_chunks=database_chunks,
+        index=index,
         existing_ids=existing_ids,
     )
+
+    if removed_ids:
+        save_faiss_index(
+            index
+        )
+        save_index_metadata(
+            index
+        )
+        print(
+            f"Pruned stale transcript FAISS vectors: {removed_ids:,}"
+        )
 
     synchronize_database_status(
         engine=engine,

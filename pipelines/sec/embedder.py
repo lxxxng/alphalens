@@ -504,29 +504,24 @@ def synchronize_database_status(
 
 
 # ============================================================
-# validate_index_ids()
+# reconcile_index_ids()
 # ============================================================
 
-def validate_index_ids(
+def reconcile_index_ids(
     database_chunks,
+    index,
     existing_ids: set[int],
 ):
     """
-    Make sure FAISS does not contain chunk IDs that no longer
-    exist in PostgreSQL.
+    Remove FAISS vectors whose source chunks no longer exist.
 
     Why could this happen?
     ----------------------
 
-    Our chunker can be rerun.
-
-    If the chunking algorithm changes, PostgreSQL chunk IDs
-    may change.
-
-    An old FAISS index would then refer to obsolete IDs.
-
-    In that case it is safer to rebuild the index instead of
-    silently returning the wrong text.
+    SEC retention and reprocessing can legitimately delete old
+    PostgreSQL chunks. IndexIDMap2 supports deleting those exact
+    IDs, which preserves every still-valid vector and avoids an
+    expensive full-corpus OpenAI rebuild.
     """
 
     database_ids = {
@@ -541,16 +536,56 @@ def validate_index_ids(
     )
 
 
-    if stale_ids:
+    if not stale_ids:
+
+        return existing_ids, 0
+
+
+    if index is None:
 
         raise RuntimeError(
-            f"FAISS contains {len(stale_ids)} chunk IDs "
-            "that no longer exist in PostgreSQL.\n\n"
-            "The chunking data probably changed after the "
-            "FAISS index was created.\n"
-            "Delete the FAISS index and metadata file and "
-            "rebuild the embeddings."
+            "FAISS IDs were supplied without an index."
         )
+
+
+    stale_id_array = np.array(
+        sorted(stale_ids),
+        dtype="int64",
+    )
+
+
+    removed = int(
+        index.remove_ids(
+            stale_id_array
+        )
+    )
+
+
+    if removed != len(stale_ids):
+
+        raise RuntimeError(
+            "FAISS did not remove every stale SEC chunk ID. "
+            f"Expected {len(stale_ids)}, removed {removed}."
+        )
+
+
+    remaining_ids = get_existing_faiss_ids(
+        index
+    )
+
+
+    unexpected_ids = remaining_ids - database_ids
+
+
+    if unexpected_ids:
+
+        raise RuntimeError(
+            "FAISS still contains SEC chunk IDs that are absent "
+            "from PostgreSQL after reconciliation."
+        )
+
+
+    return remaining_ids, removed
 
 
 # ============================================================
@@ -1116,14 +1151,37 @@ def run_embedding_pipeline():
     )
 
 
-    # Detect an old/incompatible index.
-    validate_index_ids(
+    # Retention can remove source chunks after their vectors were
+    # indexed. Prune only those orphaned IDs and retain all reusable
+    # embeddings before adding newly created chunks.
+    existing_ids, removed_ids = reconcile_index_ids(
         database_chunks=
             database_chunks,
+
+        index=
+            index,
 
         existing_ids=
             existing_ids,
     )
+
+
+    if removed_ids:
+
+        save_faiss_index(
+            index
+        )
+
+
+        save_index_metadata(
+            index
+        )
+
+
+        print(
+            f"Pruned stale FAISS vectors: "
+            f"{removed_ids:,}"
+        )
 
 
     # Fix PostgreSQL statuses if a previous run successfully
