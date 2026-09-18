@@ -83,6 +83,12 @@ const signalTrendLegend = document.querySelector("#signal-trend-legend");
 const signalEmpty = document.querySelector("#signal-empty");
 const topicAudience = document.querySelector("#topic-audience");
 const topicSignals = document.querySelector("#topic-signals");
+const modelChampionName = document.querySelector("#model-champion-name");
+const modelChampionMessage = document.querySelector("#model-champion-message");
+const modelChampionStatus = document.querySelector("#model-champion-status");
+const modelArchive = document.querySelector("#model-archive");
+const modelArchiveKicker = document.querySelector("#model-archive-kicker");
+const modelArchiveTitle = document.querySelector("#model-archive-title");
 const modelVersion = document.querySelector("#model-version");
 const modelStatus = document.querySelector("#model-status");
 const modelMetrics = document.querySelector("#model-metrics");
@@ -90,6 +96,7 @@ const modelEventSource = document.querySelector("#model-event-source");
 const modelPreviewButton = document.querySelector("#model-preview");
 const modelMessage = document.querySelector("#model-message");
 const modelPredictions = document.querySelector("#model-predictions");
+const prospectiveTitle = document.querySelector("#prospective-title");
 const prospectiveVersion = document.querySelector("#prospective-version");
 const prospectiveStatus = document.querySelector("#prospective-status");
 const prospectiveProgress = document.querySelector("#prospective-progress");
@@ -255,6 +262,28 @@ function setModelStatus(label, state = "") {
   modelStatus.className = `model-status ${state}`.trim();
 }
 
+function setModelChampionStatus(label, state = "") {
+  modelChampionStatus.textContent = label;
+  modelChampionStatus.className = `model-status ${state}`.trim();
+}
+
+function formatModelFamily(family) {
+  const normalized = String(family || "model").toLowerCase();
+  const labels = {
+    elasticnet: "Elastic Net",
+    xgboost: "XGBoost",
+    extra_trees: "Extra Trees",
+    catboost: "CatBoost",
+    ridge: "Ridge",
+  };
+  return labels[normalized] || normalized.replaceAll("_", " ").toUpperCase();
+}
+
+function formatModelTarget(target) {
+  const match = String(target || "").match(/^excess_return_(\d+)d$/);
+  return match ? `${match[1]}-session excess return` : "return model";
+}
+
 function modelMetric(label, value, tone = "") {
   const metric = document.createElement("div");
   const caption = document.createElement("span");
@@ -280,14 +309,15 @@ function renderModelRegistryStatus(data) {
   modelMetrics.replaceChildren();
 
   if (!data.latest_model) {
-    modelVersion.textContent = "No model package available";
-    setModelStatus(
-      data.serving_status === "error" ? "Registry Error" : "Unavailable",
-      "error"
+    modelChampionName.textContent = "None";
+    modelChampionMessage.textContent = data.message;
+    setModelChampionStatus(
+      data.serving_status === "error" ? "Registry Error" : "No Champion",
+      data.serving_status === "error" ? "error" : "blocked"
     );
+    modelArchive.hidden = true;
     modelMetrics.hidden = true;
     modelPreviewButton.disabled = true;
-    modelMessage.textContent = data.message;
     return;
   }
 
@@ -295,9 +325,26 @@ function renderModelRegistryStatus(data) {
   const mae = model.promotion_checks?.test_mae_improvement || {};
   const sharpe = model.promotion_checks?.net_long_short_sharpe || {};
   const isChampion = model.status === "champion";
-  modelVersion.textContent = `${model.family?.toUpperCase() || "MODEL"} | ${model.version}`;
+  const family = formatModelFamily(model.family);
+  const target = formatModelTarget(model.target);
+  modelChampionName.textContent = isChampion
+    ? `${family} · ${target}`
+    : "None approved";
+  modelChampionMessage.textContent = isChampion
+    ? "The registered champion passed promotion and is available for guarded inference."
+    : "No model has passed promotion gates. The active challenger remains in shadow evaluation.";
+  setModelChampionStatus(
+    isChampion ? "Serving" : "No Champion",
+    isChampion ? "ready" : "blocked"
+  );
+  modelArchive.hidden = false;
+  modelArchiveKicker.textContent = isChampion
+    ? "Registered Production Model"
+    : "Archived Experiment";
+  modelArchiveTitle.textContent = `${family} · ${target}`;
+  modelVersion.textContent = model.version;
   setModelStatus(
-    isChampion ? "Champion" : "Research Only",
+    isChampion ? "Champion" : model.status === "rejected" ? "Rejected" : "Research Only",
     isChampion ? "ready" : "blocked"
   );
   modelMetrics.append(
@@ -357,6 +404,7 @@ function renderProspectiveStatus(data) {
   prospectiveRecent.replaceChildren();
 
   if (!data.available || !data.model) {
+    prospectiveTitle.textContent = "No Active Challenger";
     prospectiveVersion.textContent = "No frozen shadow model available";
     setProspectiveStatus("Unavailable", "error");
     prospectiveProgress.hidden = true;
@@ -376,7 +424,9 @@ function renderProspectiveStatus(data) {
   const baseline = data.baseline_metrics || {};
   const strategy = data.net_strategy || {};
   const reviewReady = data.status === "eligible_for_review";
-  prospectiveVersion.textContent = `${model.family.toUpperCase()} | ${model.version} | cutoff ${model.training_cutoff}`;
+  const family = formatModelFamily(model.family);
+  prospectiveTitle.textContent = `${family} · ${model.horizon_sessions}-Session Excess Return`;
+  prospectiveVersion.textContent = `${model.version} | trained through ${model.training_cutoff}`;
   setProspectiveStatus(
     reviewReady ? "Review Ready" : "Collecting",
     reviewReady ? "ready" : "blocked"
@@ -390,13 +440,24 @@ function renderProspectiveStatus(data) {
   prospectiveProgressTrack.setAttribute("aria-valuenow", String(matured));
   prospectiveProgressFill.style.width = `${ratio * 100}%`;
   prospectiveProgress.hidden = false;
-  prospectiveMetrics.append(
-    modelMetric("Model MAE", Number.isFinite(forecast.mae) ? forecast.mae.toFixed(4) : "--"),
-    modelMetric("Frozen Mean MAE", Number.isFinite(baseline.mae) ? baseline.mae.toFixed(4) : "--"),
-    modelMetric("Spearman IC", Number.isFinite(forecast.spearman_ic) ? forecast.spearman_ic.toFixed(3) : "--"),
-    modelMetric("Net L/S Sharpe", Number.isFinite(strategy.sharpe) ? strategy.sharpe.toFixed(2) : "--")
-  );
-  prospectiveMetrics.hidden = false;
+  const hasMaturedMetrics = [
+    forecast.mae,
+    baseline.mae,
+    forecast.spearman_ic,
+    strategy.sharpe,
+  ].some(Number.isFinite);
+
+  if (hasMaturedMetrics) {
+    prospectiveMetrics.append(
+      modelMetric("Model MAE", Number.isFinite(forecast.mae) ? forecast.mae.toFixed(4) : "--"),
+      modelMetric("Frozen Mean MAE", Number.isFinite(baseline.mae) ? baseline.mae.toFixed(4) : "--"),
+      modelMetric("Spearman IC", Number.isFinite(forecast.spearman_ic) ? forecast.spearman_ic.toFixed(3) : "--"),
+      modelMetric("Net L/S Sharpe", Number.isFinite(strategy.sharpe) ? strategy.sharpe.toFixed(2) : "--")
+    );
+    prospectiveMetrics.hidden = false;
+  } else {
+    prospectiveMetrics.hidden = true;
+  }
 
   const checks = data.checks || {};
   prospectiveChecks.append(
