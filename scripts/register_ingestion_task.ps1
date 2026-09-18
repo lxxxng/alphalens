@@ -5,7 +5,7 @@ param(
     [string]$DailyAt = "06:30",
 
     [ValidateSet("watchlists", "all")]
-    [string]$Scope = "watchlists",
+    [string]$Scope = "all",
 
     [ValidateRange(0, 50)]
     [int]$MaxAutoBriefs = 5,

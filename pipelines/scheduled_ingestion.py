@@ -587,7 +587,7 @@ def _stage_plan(
 
 def run_scheduled_ingestion(
     *,
-    scope: str = "watchlists",
+    scope: str = "all",
     tickers: list[str] | None = None,
     watchlist_id: int | None = None,
     stages: list[str] | None = None,
@@ -786,7 +786,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Incrementally refresh AlphaLens data for monitored tickers.",
     )
-    parser.add_argument("--scope", choices=("watchlists", "all"), default="watchlists")
+    parser.add_argument("--scope", choices=("watchlists", "all"), default="all")
     parser.add_argument("--watchlist-id", type=int, default=None)
     parser.add_argument("--tickers", nargs="+", default=None)
     parser.add_argument("--stages", nargs="+", choices=DEFAULT_STAGES, default=None)

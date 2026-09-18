@@ -11,6 +11,7 @@ from pipelines.scheduled_ingestion import (
     _mark_orphaned_runs,
     _run_model_monitor_stage,
     _stage_plan,
+    build_argument_parser,
     normalize_tickers,
     resolve_tickers,
     run_scheduled_ingestion,
@@ -18,6 +19,11 @@ from pipelines.scheduled_ingestion import (
 
 
 class ScheduledIngestionTests(unittest.TestCase):
+    def test_cli_defaults_to_full_company_scope(self):
+        arguments = build_argument_parser().parse_args([])
+
+        self.assertEqual(arguments.scope, "all")
+
     def test_orphaned_running_runs_are_closed_before_a_new_run(self):
         table = Table(
             "ingestion_runs",

@@ -1,6 +1,6 @@
 param(
     [ValidateSet("watchlists", "all")]
-    [string]$Scope = "watchlists",
+    [string]$Scope = "all",
 
     [ValidateRange(0, 50)]
     [int]$MaxAutoBriefs = 5,

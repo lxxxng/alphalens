@@ -1075,8 +1075,9 @@ ticker does not create duplicates.
 
 ### Scheduled Ingestion
 
-The incremental scheduler uses the union of all watchlist members by default.
-It refreshes recent OHLCV data, SEC metadata and documents, earnings calls,
+The incremental scheduler uses every company in the configured universe by
+default, while `--scope watchlists` remains available for a smaller run. It
+refreshes recent OHLCV data, SEC metadata and documents, earnings calls,
 missing chunks, embeddings, and pending FinBERT sentiment. It then generates
 new prospective model predictions, matures older predictions, and generates
 quality-gated briefs for queued filing and earnings alerts. PostgreSQL
@@ -1088,13 +1089,13 @@ one-time model freeze, the model-monitor stage reports a clean skip.
 Preview the resolved ticker scope without calling external providers:
 
 ```powershell
-python -m pipelines.scheduled_ingestion --scope watchlists --dry-run
+python -m pipelines.scheduled_ingestion --dry-run
 ```
 
 Run one incremental refresh manually:
 
 ```powershell
-.\scripts\run_scheduled_ingestion.ps1 -Scope watchlists
+.\scripts\run_scheduled_ingestion.ps1
 ```
 
 Automatic generation is capped at five briefs per run by default. Change the
@@ -1104,7 +1105,7 @@ disable generation while retaining ingestion and alert detection.
 Register the one-time Windows task at 6:30 AM each day:
 
 ```powershell
-.\scripts\register_ingestion_task.ps1 -DailyAt "06:30" -Scope watchlists
+.\scripts\register_ingestion_task.ps1 -DailyAt "06:30"
 ```
 
 The PC, Docker PostgreSQL container, and internet connection must be available
