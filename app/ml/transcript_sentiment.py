@@ -10,6 +10,7 @@ from typing import Any
 DEFAULT_MODEL_NAME = "ProsusAI/finbert"
 DEFAULT_MODEL_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
 EXPECTED_LABELS = ("positive", "negative", "neutral")
+VALID_DEVICE_SETTINGS = ("auto", "cpu", "cuda")
 FILING_SENTIMENT_SECTION_KEYS = (
     "item_7_mda",
     "part1_item2_mda",
@@ -70,11 +71,41 @@ class FinBERTSentimentScorer:
                 "pip install -r requirements-ml.txt."
             ) from error
 
-        # Large Windows hosts can make a small BERT inference slower by
-        # oversubscribing CPU workers. Keep the default predictable while
-        # allowing dedicated workers to tune it explicitly.
-        cpu_threads = max(1, int(os.getenv("FINBERT_CPU_THREADS", "4")))
-        torch.set_num_threads(cpu_threads)
+        device_setting = os.getenv("FINBERT_DEVICE", "auto").strip().lower()
+
+        if device_setting not in VALID_DEVICE_SETTINGS:
+            choices = ", ".join(VALID_DEVICE_SETTINGS)
+            raise ValueError(
+                f"FINBERT_DEVICE must be one of: {choices}."
+            )
+
+        cuda_available = torch.cuda.is_available()
+
+        if device_setting == "cuda" and not cuda_available:
+            raise RuntimeError(
+                "FINBERT_DEVICE=cuda was requested, but this PyTorch "
+                "installation cannot access CUDA."
+            )
+
+        use_cuda = (
+            device_setting == "cuda"
+            or (device_setting == "auto" and cuda_available)
+        )
+        pipeline_device = 0 if use_cuda else -1
+
+        if use_cuda:
+            device_name = torch.cuda.get_device_name(0)
+        else:
+            # Large Windows hosts can make a small BERT inference slower by
+            # oversubscribing CPU workers. Keep the fallback predictable.
+            cpu_threads = max(
+                1,
+                int(os.getenv("FINBERT_CPU_THREADS", "4")),
+            )
+            torch.set_num_threads(cpu_threads)
+            device_name = f"CPU ({cpu_threads} threads)"
+
+        print(f"FinBERT device: {device_name}", flush=True)
 
         self._tokenizer = AutoTokenizer.from_pretrained(
             self.model_name,
@@ -88,7 +119,7 @@ class FinBERTSentimentScorer:
             "text-classification",
             model=model,
             tokenizer=self._tokenizer,
-            device=-1,
+            device=pipeline_device,
         )
 
     def _token_segments(self, text: str) -> tuple[list[str], list[int]]:
