@@ -1,0 +1,70 @@
+name: Build AWS container images
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/**"
+      - "pipelines/**"
+      - "db/sql/**"
+      - "Dockerfile"
+      - "requirements*.txt"
+      - ".github/workflows/aws-images.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ap-southeast-1
+
+jobs:
+  build-and-push:
+    name: Build ${{ matrix.repository }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repository: alphalens-api
+            install_ml: "false"
+          - repository: alphalens-worker
+            install_ml: "true"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ECR_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: AlphaLensImageBuild
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          build-args: |
+            INSTALL_INFERENCE=true
+            INSTALL_ML=${{ matrix.install_ml }}
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ matrix.repository }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/${{ matrix.repository }}:latest
+          cache-from: type=gha,scope=${{ matrix.repository }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.repository }}
